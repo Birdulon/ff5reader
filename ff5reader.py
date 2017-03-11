@@ -394,7 +394,7 @@ class FF5Reader(QMainWindow):
             painter = QtGui.QPainter(img_JP)
             for x, j in enumerate(stringROM_JP):
                 string_JP = string_JP + Glyphs_JP[j]
-                if j < 0x60:
+                if j < 0x53:
                     if j > 0x48:
                         painter.drawPixmap(x*8, 2, glyph_sprites2[j+0x17])
                         painter.drawPixmap(x*8+1,-5, glyph_sprites2[0x52])
