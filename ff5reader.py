@@ -7,6 +7,7 @@ import sys
 import os
 import struct
 from array import array
+#from heximg import HexImg
 
 pyqt_version = 0
 skip_pyqt5 = True  # "PYQT4" in os.environ
@@ -14,7 +15,7 @@ skip_pyqt5 = True  # "PYQT4" in os.environ
 if not skip_pyqt5:
     try:
         from PyQt5 import QtGui, QtCore
-        from PyQt5.QtGui import QIcon, QPalette, QColor
+        from PyQt5.QtGui import QIcon, QPalette, QColor, QFont, QFontInfo, QImage, QPixmap
         from PyQt5.QtWidgets import (
             QApplication, QMainWindow, QFormLayout,
             QGridLayout, QHBoxLayout, QVBoxLayout,
@@ -54,7 +55,7 @@ if pyqt_version is 0:
             QMessageBox, QAction, QActionGroup,
             QLabel, QMenu, QStyle,
             QSystemTrayIcon, QIcon, QPalette, QColor,
-            QValidator
+            QValidator, QFont, QFontInfo, QImage, QPixmap
         )
         from PyQt4.QtGui import QStyleOptionProgressBarV2 as QStyleOptionProgressBar
         pyqt_version = 4
@@ -63,6 +64,17 @@ if pyqt_version is 0:
               "Make sure you installed the PyQt4 package.")
         sys.exit(-1)
 
+monofont = QFont()
+monofont.setStyleHint(QFont.Monospace)
+if not monofont.fixedPitch():
+    monofont.setStyleHint(QFont.TypeWriter)
+if not monofont.fixedPitch():
+    monofont.setFamily("Monospace")
+                                                 #"Ubuntu Mono",
+                                                 #"DejaVu Sans Mono",
+                                                 #"Liberation Mono",
+                                                 #"courier"])
+#monofont.setPixelSize(8)
 
 def divceil(numerator, denominator):
     # Reverse floor division for ceil
@@ -75,6 +87,51 @@ filename = "Final Fantasy V (Japan) [En by RPGe v1.1].sfc"
 with open(filename, 'rb') as file1:
     ROM = file1.read()
 print(len(ROM))
+filename2 = "Final Fantasy V (Japan).sfc"
+with open(filename2, 'rb') as file2:
+    ROM2 = file2.read()
+print(len(ROM2))
+
+col_palette = [QColor(  0,  0,  0),
+               QColor(  0,  0,128,0),
+               QColor(128,128,128),
+               QColor(255,255,255)]
+#for i in range(4, 256):
+    #col_palette.append(QColor(i, i, i))
+
+def create_tile(bytes):
+    planes = len(bytes)//8
+    tile = array('B', range(64))
+    t_ptr = 0
+    for j, x in [(j,x) for j in range(0, 16, 2) for x in reversed(range(8))]:
+        tile[t_ptr] = (bytes[j] >> x & 1) | ((bytes[j+1] >> x & 1) << 1)
+        t_ptr += 1
+    t_ptr = 0
+    if planes == 3:
+        for j, x in [(j,x) for j in range(16, 24, 1) for x in reversed(range(8))]:
+            tile[t_ptr] |= ((bytes[j] >> x & 1) << 2)
+            t_ptr += 1
+    elif planes >= 4:
+        for j, x in [(j,x) for j in range(16, 32, 2) for x in reversed(range(8))]:
+            tile[t_ptr] |= ((bytes[j] >> x & 1) << 2) | ((bytes[j+1] >> x & 1) << 3)
+            t_ptr += 1
+    if planes == 8:
+        t_ptr = 0
+        for j, x in [(j,x) for j in range(32, 48, 2) for x in reversed(range(8))]:
+            tile[t_ptr] |= ((bytes[j] >> x & 1) << 4) | ((bytes[j+1] >> x & 1) << 5) \
+                | ((bytes[j+16] >> x & 1) << 6) | ((bytes[j+17] >> x & 1) << 7)
+            t_ptr += 1
+    img = QImage(8, 8, QImage.Format_Indexed8)
+    img.setColorTable([c.rgba() for c in col_palette])
+    imgbits = img.bits()
+    imgbits.setsize(img.byteCount())
+    imgbits[:64] = tile
+    pix = QPixmap.fromImage(img)
+    return pix
+
+glyph_sprites = []
+glyph_sprites2 = []
+glyph_offset = 0x11F000
 
 Glyphs = [' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',      # 0x00
           ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',       # 0x10
@@ -86,12 +143,13 @@ Glyphs = [' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' 
           'Q','R','S','T',    'U','V','W','X',    'Y','Z','a','b',    'c','d','e','f',      # 0x70
           'g','h','i','j',    'k','l','m','n',    'o','p','q','r',    's','t','u','v',      # 0x80
           'w','x','y','z',    'il','it','','li',  'll','\'','"',':',   ';',',','(',')',     # 0x90
-          '/','!','?','0',    'ti','fi','Bl','a', 'pe','l','\'','"',   'if','lt','tl','ir', # 0xA0
+          '/','!','?','.',    'ti','fi','Bl','a', 'pe','l','\'','"',   'if','lt','tl','ir', # 0xA0
           'tt','や','ユ','ゆ', 'ヨ', 'よ', 'ワ', 'わ', 'ン', 'ん', 'ヲ','を', '[key]', '[shoe]', '[diamond?]', '[hammer]',  # 0xB0
           '[tent]', '[ribbon]', '[potion]', '[shirt]', '[song]', '-', '[shuriken]', '・・', '[scroll]', '!', '[claw]', '?', '[glove]', 'pickaxe head??', '/', ':',    # 0xC0
           '「', '」', '0', 'A', 'B', 'X', 'Y', 'L', 'R', 'E', 'H', 'M', 'P', 'S', 'C', 'T',    # 0xD0
           ' ', ' ', '+', '[sword]', '[wh.mag]', '[blk.mag]', '[t.mag]', '[knife]', '[spear]', '[axe]', '[katana]', '[rod]', '[staff]', '[bow]', '[harp]', '[whip]',   # 0xE0
           '[bell]', '[shield]', '[helmet]', '[armor]', '[ring]', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ']    # F0
+Glyphs_JP = Glyphs
 
 BGM_Tracks = ["Ahead on our way", "The Fierce Battle", "A Presentiment", "Go Go Boko!",
               "Pirates Ahoy", "Tenderness in the Air", "Fate in Haze", "Moogle theme",
@@ -126,11 +184,12 @@ def MakeStringList(start, end, length):
         id += 1
     return stringlist
 
-items = MakeStringList(0x111380, 0x111C80, 9)
-magics = MakeStringList(0x111C80, 0x111E8A, 6)
-more_magics = MakeStringList(0x111E8A, 0x11211B, 9)
-enemy_names = MakeStringList(0x200050, 0x200F50, 10)
+#items = MakeStringImgList(0x111380, 0x111C80, 9)
+#magics = MakeStringList(0x111C80, 0x111E8A, 6)
+#more_magics = MakeStringList(0x111E8A, 0x11211B, 9)
+#enemy_names = MakeStringList(0x200050, 0x200F50, 10)
 stringlist_headers = ["Address", "ID", "Name"]
+imglist_headers = stringlist_headers + ["Img", "Img JP"]
 
 zone_names_count = 0x100
 zone_names = []
@@ -236,7 +295,16 @@ def MakeTable(headers, items, sortable=False, row_labels=True):
     table.setColumnCount(cols)
     table.setHorizontalHeaderLabels(headers)
     for row, col, item in [(x,y,items[x][y]) for x in range(rows) for y in range(cols)]:
-        table.setItem(row, col, QTableWidgetItem(item))
+        if type(item) == type(QPixmap()):
+            pixmap_scaled = item.scaled(item.size() * 2)
+            lab = QLabel()
+            lab.setPixmap(pixmap_scaled)
+            table.setCellWidget(row, col, lab)
+        else:
+            q_item = QTableWidgetItem(item)
+            if item[:2] == "0x":
+                q_item.setFont(monofont)
+            table.setItem(row, col, q_item)
     table.resizeColumnsToContents()
     if sortable:
         table.setSortingEnabled(True)
@@ -251,15 +319,44 @@ class FF5Reader(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self, None)
 
+        self._generate_glyphs(ROM, glyph_sprites)
+        self._generate_glyphs(ROM2, glyph_sprites2)
+        items = self.MakeStringImgList(0x111380, 0x111C80, 9)
+        magics = self.MakeStringImgList(0x111C80, 0x111E8A, 6)
+        more_magics = self.MakeStringImgList(0x111E8A, 0x11211B, 9)
+        enemy_names = self.MakeStringImgList(0x200050, 0x200F50, 10)
+
+        glyph_layout = QGridLayout()
+        for i in range(len(glyph_sprites)):
+            item = glyph_sprites[i]
+            pixmap_scaled = item.scaled(item.size() * 4)
+            lab = QLabel()
+            lab.setPixmap(pixmap_scaled)
+            glyph_layout.addWidget(lab, i // 16, i % 16)
+        glyph_frame = QWidget()
+        glyph_frame.setLayout(glyph_layout)
+
+        glyph_layout2 = QGridLayout()
+        for i in range(len(glyph_sprites2)):
+            item = glyph_sprites2[i]
+            pixmap_scaled = item.scaled(item.size() * 4)
+            lab = QLabel()
+            lab.setPixmap(pixmap_scaled)
+            glyph_layout2.addWidget(lab, i // 16, i % 16)
+        glyph_frame2 = QWidget()
+        glyph_frame2.setLayout(glyph_layout2)
+
         self.tabwidget = QTabWidget()
         self.enemy_sprites = QFrame()
+        self.tabwidget.addTab(glyph_frame, "Glyphs (EN)")
+        self.tabwidget.addTab(glyph_frame2, "Glyphs (JP)")
         self.tabwidget.addTab(self.enemy_sprites, "Enemy Sprites")
         self.tabwidget.addTab(MakeTable(zone_headers, zone_data, True), "Zones")
         self.tabwidget.addTab(MakeTable(npc_layer_headers, npc_layers, True), "NPC Layers")
-        self.tabwidget.addTab(MakeTable(stringlist_headers, items, row_labels=False), "Items")
-        self.tabwidget.addTab(MakeTable(stringlist_headers, magics, row_labels=False), "Magics")
-        self.tabwidget.addTab(MakeTable(stringlist_headers, more_magics, row_labels=False), "More Magics")
-        self.tabwidget.addTab(MakeTable(stringlist_headers, enemy_names, row_labels=False), "Enemy Names")
+        self.tabwidget.addTab(MakeTable(imglist_headers, items, row_labels=False), "Items")
+        self.tabwidget.addTab(MakeTable(imglist_headers, magics, row_labels=False), "Magics")
+        self.tabwidget.addTab(MakeTable(imglist_headers, more_magics, row_labels=False), "More Magics")
+        self.tabwidget.addTab(MakeTable(imglist_headers, enemy_names, row_labels=False), "Enemy Names")
 
         layout = QHBoxLayout()
         layout.addWidget(self.tabwidget)
@@ -267,6 +364,49 @@ class FF5Reader(QMainWindow):
         self.main_widget.setLayout(layout)
         self.setCentralWidget(self.main_widget)
         self.show()
+
+
+    def _generate_glyphs(self, rom, spritelist):
+        for i in range(0x100):
+            j = glyph_offset + (i*16)
+            #print("Tile address: 0x{:06x}".format(j))
+            spritelist.append(create_tile(rom[j:j+16]))
+
+    def MakeStringImgList(self, start, end, length):
+        stringlist = []
+        id = 0
+        ids = (end-start)//length
+        id_digits = hex_length(ids-1)
+        for i in range(start, end, length):
+            stringROM = ROM[i:i+length]
+            string = ""
+            img = QImage(length*8, 10, QImage.Format_RGB16)
+            img.fill(QColor(0,0,128))
+            painter = QtGui.QPainter(img)
+            for x, j in enumerate(stringROM):
+                string = string + Glyphs[j]
+                painter.drawPixmap(x*8, 1, glyph_sprites[j])
+            del painter
+            stringROM_JP = ROM2[i:i+length]
+            string_JP = ""
+            img_JP = QImage(length*8, 10, QImage.Format_RGB16)
+            img_JP.fill(QColor(0,0,128))
+            painter = QtGui.QPainter(img_JP)
+            for x, j in enumerate(stringROM_JP):
+                string_JP = string_JP + Glyphs_JP[j]
+                if j < 0x60:
+                    if j > 0x48:
+                        painter.drawPixmap(x*8, 2, glyph_sprites2[j+0x17])
+                        painter.drawPixmap(x*8+1,-5, glyph_sprites2[0x52])
+                    else:
+                        painter.drawPixmap(x*8, 2, glyph_sprites2[j+0x40])
+                        painter.drawPixmap(x*8+1,-6, glyph_sprites2[0x51])
+                else:
+                    painter.drawPixmap(x*8, 2, glyph_sprites2[j])
+            del painter
+            stringlist.append(("0x{:06X}".format(i), "0x{0:0{1}X}".format(id, id_digits), string, QPixmap.fromImage(img),  QPixmap.fromImage(img_JP)))
+            id += 1
+        return stringlist
 
 
 
