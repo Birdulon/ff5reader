@@ -210,12 +210,12 @@ Glyphs_JP_large = list(Glyphs_JP2)  # Large glyphs are subtly different again
 Glyphs_JP_large[0xE0:0xEB] = ['←','→','+','、',  '◯', '『', 'Ｆ', '°C',  '・', '（', '）']
 
 Glyphs_Kanji = (
-    '王','行','力','　',    '　','　','　','　',    '入','城','　','士',    '　','　','　','父',  # 0x000
+    '王','行','力','様',    '　','　','　','　',    '入','城','　','士',    '　','　','　','父',  # 0x000
     '人','見','　','　',    '大','　','　','何',    '　','　','　','　',    '　','　','　','　',  # 0x010
     '　','心','間','　',    '風','　','　','　',    '　','　','　','　',    '火','　','　','　',  # 0x020
     '　','　','　','　',    '　','　','　','　',    '地','　','　','　',    '　','　','　','　',  # 0x030
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','一','　','　',  # 0x040
-    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x050
+    '　','　','神','　',    '　','　','殿','　',    '　','　','　','　',    '　','　','　','　',  # 0x050
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x060
     '　','　','階','　',    '　','　','　','　',    '　','　','土','　',    '　','　','　','　',  # 0x070
 
@@ -289,7 +289,7 @@ class FF5Reader(QMainWindow):
         generate_glyphs_large(ROM2, glyph_sprites_large, 0x03E800)
         generate_glyphs_large(ROM2, glyph_sprites_kanji, 0x1BD000, 0x1AA)
         global zone_names
-        zone_names = make_string_img_list_indirect(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200, large=True)
+        zone_names = make_string_img_list(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200, indirect=True, large=True)
         items = make_string_img_list(0x111380, 9, 256)
         magics = make_string_img_list(0x111C80, 6, 87)
         more_magics = make_string_img_list(0x111E8A, 9, 73)
@@ -355,52 +355,14 @@ class FF5Reader(QMainWindow):
                         npc_layers[-1].append("0x{0:0{1}X}".format(val, z[1]*2))
             j += z[1]
 
-        glyph_layout = QGridLayout()
-        for i in range(len(glyph_sprites)):
-            item = glyph_sprites[i]
-            pixmap_scaled = item.scaled(item.size() * 4)
-            lab = QLabel()
-            lab.setPixmap(pixmap_scaled)
-            glyph_layout.addWidget(lab, i // 16, i % 16)
-        glyph_frame = QWidget()
-        glyph_frame.setLayout(glyph_layout)
-
-        glyph_layout2 = QGridLayout()
-        for i in range(len(glyph_sprites2)):
-            item = glyph_sprites2[i]
-            pixmap_scaled = item.scaled(item.size() * 4)
-            lab = QLabel()
-            lab.setPixmap(pixmap_scaled)
-            glyph_layout2.addWidget(lab, i // 16, i % 16)
-        glyph_frame2 = QWidget()
-        glyph_frame2.setLayout(glyph_layout2)
-
-        glyph_layout3 = QGridLayout()
-        for i in range(len(glyph_sprites_large)):
-            item = glyph_sprites_large[i]
-            pixmap_scaled = item.scaled(item.size() * 2)
-            lab = QLabel()
-            lab.setPixmap(pixmap_scaled)
-            glyph_layout3.addWidget(lab, i // 16, i % 16)
-        glyph_frame3 = QWidget()
-        glyph_frame3.setLayout(glyph_layout3)
-
-        glyph_layout4 = QGridLayout()
-        for i in range(len(glyph_sprites_kanji)):
-            item = glyph_sprites_kanji[i]
-            pixmap_scaled = item.scaled(item.size() * 2)
-            lab = QLabel()
-            lab.setPixmap(pixmap_scaled)
-            glyph_layout4.addWidget(lab, i // 16, i % 16)
-        glyph_frame4 = QWidget()
-        glyph_frame4.setLayout(glyph_layout4)
+        dialogue = make_string_img_list(0x2013F0, 3, 0x500, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True)  # start_str=0x210000
 
         self.tabwidget = QTabWidget()
         self.enemy_sprites = QFrame()
-        self.tabwidget.addTab(glyph_frame, "Glyphs (EN)")
-        self.tabwidget.addTab(glyph_frame2, "Glyphs (JP)")
-        self.tabwidget.addTab(glyph_frame3, "Glyphs (Large)")
-        self.tabwidget.addTab(glyph_frame4, "Glyphs (Kanji)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites, 4), "Glyphs (EN)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites2, 4), "Glyphs (JP)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_large, 2), "Glyphs (Large)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_kanji, 2), "Glyphs (Kanji)")
         self.tabwidget.addTab(self.enemy_sprites, "Enemy Sprites")
         self.tabwidget.addTab(make_table(zone_headers, zone_data, True), "Zones")
         self.tabwidget.addTab(make_table(imglist_headers, zone_names, True), "Zone Names")
@@ -409,6 +371,7 @@ class FF5Reader(QMainWindow):
         self.tabwidget.addTab(make_table(imglist_headers, magics, row_labels=False), "Magics")
         self.tabwidget.addTab(make_table(imglist_headers, more_magics, row_labels=False), "More Magics")
         self.tabwidget.addTab(make_table(imglist_headers, enemy_names, row_labels=False), "Enemy Names")
+        self.tabwidget.addTab(make_table(imglist_headers, dialogue), "Dialogue")
 
         layout = QHBoxLayout()
         layout.addWidget(self.tabwidget)
@@ -458,73 +421,145 @@ def make_string_img_large(bytestring):
     if len(bytestring) < 1:
         raise ValueError('Empty bytestring was passed')
     string = ""
-    img = QImage(len(bytestring)*16, 14, QImage.Format_RGB16)
+    rows = 20  # This is just for testing
+    img = QImage(len(bytestring)*16, 14*rows, QImage.Format_RGB16)
     img.fill(bg_color)
     painter = QtGui.QPainter(img)
+
     it = iter(range(len(bytestring)))
     x = 0
-    for i in it:
-        j = bytestring[i]
-        if j < 0x1E:
-            string = string + '[0x{:04X}]'.format(int.from_bytes(bytestring[i:i+2],'little'))
-            next(it)
-        elif j == 0x1E:
-            string = string + Glyphs_Kanji[bytestring[i+1]]
-            painter.drawPixmap(x*16, 1, glyph_sprites_kanji[bytestring[i+1]])
-            next(it)
-        elif j == 0x1F:
-            string = string + Glyphs_Kanji[0x100 + bytestring[i+1]]
-            painter.drawPixmap(x*16, 1, glyph_sprites_kanji[0x100 + bytestring[i+1]])
-            next(it)
-        else:
-            string = string + Glyphs_JP_large[j]
-            painter.drawPixmap(x*16, 1, glyph_sprites_large[j])
-        x += 1
+    xmax = x
+    y = 0
+    tabstop = 0
+    try:
+        for i in it:
+            j = bytestring[i]
+            '''
+            There's a lot of dialogue substitutions, this is going to be annoying and/or messy.
+            Is 0x00 a wait for input marker?
+            0x03 is クリスタル
+            0x0A is a speaker tab, perhaps linebreak as well?
+            0x0D appears to expand to 風の神殿
+            : (0xCF) appears to expand to って
+            S (0xDD) to ……
+            C (0xDE) to だいじょうぶ
+            T (0xDF) to は、
+            ◯ (0xE4) appears to expand to して
+            F (0xE6) appears to expand to otousan (お父様)
+            ・ (0xE8) appears to expand to です
+            % (0xCD) to !!
+            °C (0xE7) to !?
+            '''
+            if j == 0x01:
+                string = string + '\n[0x01]'
+                y += 1
+                xmax = x if x > xmax else xmax
+                x = 0
+                continue
+            elif j == 0x09:
+                string = string + '\t[0x09]'
+                x = tabstop
+                continue
+            elif j == 0x0A:
+                if x != 0:
+                    y += 1
+                    xmax = x if x > xmax else xmax
+                    string = string + '\n'
+                string = string + '\t[0x0A]'
+                x = tabstop
+                continue
+            elif j == 0x19:
+                # Lenna is speaking
+                string = string + "[レナ「]"
+                painter.drawPixmap(0*16, (y*14)+1, glyph_sprites_large[0xAC])
+                painter.drawPixmap(1*16, (y*14)+1, glyph_sprites_large[0x92])
+                painter.drawPixmap(2*16, (y*14)+1, glyph_sprites_large[0xD0])
+                x += 3
+                tabstop = x
+                continue
+            elif j == 0x1B:
+                # Faris is speaking
+                string = string + "[ファリス「]"
+                painter.drawPixmap(0*16, (y*14)+1, glyph_sprites_large[0x64])
+                painter.drawPixmap(1*16, (y*14)+1, glyph_sprites_large[0xC4])
+                painter.drawPixmap(2*16, (y*14)+1, glyph_sprites_large[0xA8])
+                painter.drawPixmap(3*16, (y*14)+1, glyph_sprites_large[0x78])
+                painter.drawPixmap(4*16, (y*14)+1, glyph_sprites_large[0xD0])
+                x += 5
+                tabstop = x
+                continue
+            elif j < 0x1E:
+                string = string + '[0x{:02X}]'.format(j)
+                continue
+            elif j == 0x1E:
+                string = string + Glyphs_Kanji[bytestring[i+1]]
+                painter.drawPixmap(x*16, (y*14)+1, glyph_sprites_kanji[bytestring[i+1]])
+                next(it)
+            elif j == 0x1F:
+                string = string + Glyphs_Kanji[0x100 + bytestring[i+1]]
+                painter.drawPixmap(x*16, (y*14)+1, glyph_sprites_kanji[0x100 + bytestring[i+1]])
+                next(it)
+            else:
+                string = string + Glyphs_JP_large[j]
+                painter.drawPixmap(x*16, (y*14)+1, glyph_sprites_large[j])
+            x += 1
+            if (j == 0xD0) or (j == 0xE5):
+                tabstop = x
+    except (StopIteration, IndexError):
+        pass
     del painter
-    return string, QPixmap.fromImage(img.copy(0, 0, x*16, 14))
+    xmax = x if x > xmax else xmax
+    return string, QPixmap.fromImage(img.copy(0, 0, xmax*16, (y+1)*14))
 
-def make_string_img_list(start, length, num, start_jp=None, len_jp=None, indirect=False, large=False):
-    start_jp = start if start_jp is None else start_jp
-    len_jp = length if len_jp is None else len_jp
-    stringlist = []
-    id_digits = hex_length(num-1)
-    for id in range(num):
-        j1 = start + (id*length)
-        j2 = start_jp + (id*len_jp)
-        string, img = make_string_img(ROM[j1:j1+length])
-        if large:
-            string_JP, img_JP = make_string_img_large(ROM2[j2:j2+len_jp])
-        else:
-            string_JP, img_JP = make_string_img(ROM2[j2:j2+len_jp], jp=True)
-        stringlist.append(["0x{:06X}".format(j1), "0x{0:0{1}X}".format(id, id_digits), string, img, string_JP, img_JP])
-    return stringlist
-
-def make_string_img_list_indirect(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None, large=False):
+def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None, indirect=False, large=False):
     start_jp = start if start_jp is None else start_jp
     len_jp = length if len_jp is None else len_jp
     start_str = start if start_str is None else start_str
     start_jp_str = start_str if start_jp_str is None else start_jp_str
     stringlist = []
     id_digits = hex_length(num-1)
-    for id in range(num):
-        en = start + (id*length)
-        jp = start_jp + (id*len_jp)
-        en_start = int.from_bytes(ROM[en:en+length],'little') + start_str
-        en_end = int.from_bytes(ROM[en+length:en+(length*2)],'little') + start_str
-        jp_start = int.from_bytes(ROM2[jp:jp+len_jp],'little') + start_jp_str
-        jp_end = int.from_bytes(ROM2[jp+len_jp:jp+(len_jp*2)],'little') + start_jp_str
-        if (en_end == start_str) or (jp_end == start_jp_str) or (en_end > len(ROM)) or (jp_end > len(ROM2)):
-            break
-        try:
-            string, img = make_string_img(ROM[en_start:en_end])
+    if indirect:
+        for id in range(num):
+            en = start + (id*length)
+            jp = start_jp + (id*len_jp)
+            en_start = int.from_bytes(ROM[en:en+length],'little') + start_str
+            en_end = int.from_bytes(ROM[en+length:en+(length*2)],'little') + start_str
+            if en_start >= 0xC00000:
+                en_start -= 0xC00000
+                en_end -= 0xC00000
+            jp_start = int.from_bytes(ROM2[jp:jp+len_jp],'little') + start_jp_str
+            jp_end = int.from_bytes(ROM2[jp+len_jp:jp+(len_jp*2)],'little') + start_jp_str
+            if (en_end == start_str) or (jp_end == start_jp_str) or (en_end > len(ROM)) or (jp_end > len(ROM2)):
+                break
+            try:
+                if en_end > en_start:
+                    string, img = make_string_img(ROM[en_start:en_end])
+                else:
+                    string = ''
+                    img = None
+
+                if jp_end > jp_start:
+                    if large:
+                        string_JP, img_JP = make_string_img_large(ROM2[jp_start:jp_end])
+                    else:
+                        string_JP, img_JP = make_string_img(ROM2[jp_start:jp_end], jp=True)
+                else:
+                    string_JP = ''
+                    img_JP = None
+            except ValueError:
+                print("ID: {} \tRef.0x{:06X} 0x{:06X} \tRange EN: 0x{:06X}-0x{:06X} \tRange JP: 0x{:06X}-0x{:06X}".format(id, en, jp, en_start, en_end, jp_start, jp_end))
+                raise
+            stringlist.append(["0x{:06X}".format(en), "0x{0:0{1}X}".format(id, id_digits), string, img, string_JP, img_JP, "0x{:06X}".format(jp_start)])
+    else:
+        for id in range(num):
+            j1 = start + (id*length)
+            j2 = start_jp + (id*len_jp)
+            string, img = make_string_img(ROM[j1:j1+length])
             if large:
-                string_JP, img_JP = make_string_img_large(ROM2[jp_start:jp_end])
+                string_JP, img_JP = make_string_img_large(ROM2[j2:j2+len_jp])
             else:
-                string_JP, img_JP = make_string_img(ROM2[jp_start:jp_end], jp=True)
-        except ValueError:
-            print("ID: {} \tRef.0x{:06X} 0x{:06X} \tRange EN: 0x{:06X}-0x{:06X} \tRange JP: 0x{:06X}-0x{:06X}".format(id, en, jp, en_start, en_end, jp_start, jp_end))
-            raise
-        stringlist.append(["0x{:06X}".format(en), "0x{0:0{1}X}".format(id, id_digits), string, img, string_JP, img_JP, "0x{:06X}".format(jp_start)])
+                string_JP, img_JP = make_string_img(ROM2[j2:j2+len_jp], jp=True)
+            stringlist.append(["0x{:06X}".format(j1), "0x{0:0{1}X}".format(id, id_digits), string, img, string_JP, img_JP])
     return stringlist
 
 def make_table(headers, items, sortable=False, row_labels=True):
@@ -553,10 +588,37 @@ def make_table(headers, items, sortable=False, row_labels=True):
             if item[:2] == "0x":
                 q_item.setFont(monofont)
             table.setItem(row, col, q_item)
+
+    # Stupid hack to get table to size correctly
+    table.hide()
+    geometry = table.viewport().geometry()
+    table.viewport().setGeometry(QtCore.QRect(0, 0, 0x7FFFFFFF, 0x7FFFFFFF))
     table.resizeColumnsToContents()
+    table.resizeRowsToContents()
+    table.viewport().setGeometry(geometry)
+    table.show()
+
     if sortable:
         table.setSortingEnabled(True)
         table.sortItems(0)
+    return table
+
+def make_pixmap_table(items, scale=4):
+    table = QTableWidget()
+    rows = divceil(len(items), 16)
+    rd = hex_length(rows-1)+1
+    cols = 16
+    table.setRowCount(rows)
+    table.setVerticalHeaderLabels(['0x{0:0{1}X}'.format(v*16, rd) for v in range(rows)])
+    table.setColumnCount(cols)
+    table.setHorizontalHeaderLabels(['0x{:X}'.format(v) for v in range(cols)])
+    for i in range(len(items)):
+        item = items[i]
+        pixmap_scaled = item.scaled(item.size() * scale)
+        lab = QLabel()
+        lab.setPixmap(pixmap_scaled)
+        table.setCellWidget(i // cols, i % cols, lab)
+    table.resizeColumnsToContents()
     return table
 
 
