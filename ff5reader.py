@@ -170,7 +170,7 @@ def create_quadtile(bytes, ltr=False):
 glyph_sprites = []
 glyph_sprites2 = []
 glyph_sprites_large = []
-glyph_sprites_large2 = []
+glyph_sprites_kanji = []
 
 Glyphs = (
     ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',      # 0x00
@@ -206,6 +206,40 @@ Glyphs_JP2[0x20:0x52] = [
     'ゲ','げ','ゴ','ご',  'ザ','ざ','ジ','じ',  'ズ','ず','ゼ','ぜ',  'ゾ','ぞ','ダ','だ',  # 0x30
     'ヂ','ぢ','ヅ','づ',  'デ','で','ド','ど',             # 0x40-0x48
     'パ','ぱ','ピ','ぴ',  'プ','ぷ','ペ','ぺ',  'ポ','ぽ']  # 0x48-0x52
+Glyphs_JP_large = list(Glyphs_JP2)  # Large glyphs are subtly different again
+Glyphs_JP_large[0xE0:0xEB] = ['←','→','+','、',  '◯', '『', 'Ｆ', '°C',  '・', '（', '）']
+
+Glyphs_Kanji = (
+    '王','行','力','　',    '　','　','　','　',    '入','城','　','士',    '　','　','　','父',  # 0x000
+    '人','見','　','　',    '大','　','　','何',    '　','　','　','　',    '　','　','　','　',  # 0x010
+    '　','心','間','　',    '風','　','　','　',    '　','　','　','　',    '火','　','　','　',  # 0x020
+    '　','　','　','　',    '　','　','　','　',    '地','　','　','　',    '　','　','　','　',  # 0x030
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','一','　','　',  # 0x040
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x050
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x060
+    '　','　','階','　',    '　','　','　','　',    '　','　','土','　',    '　','　','　','　',  # 0x070
+
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x080
+    '　','　','　','　',    '　','下','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x090
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x0A0
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x0B0
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','少','　','　',  # 0x0C0
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x0D0
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x0E0
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x0F0
+
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x100
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x110
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x120
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x130
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x140
+    '炎','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x150
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x160
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x170
+
+    '　','　','　','　',    '　','　','　','　',    '　','刀','　','　',    '　','　','　','　',  # 0x180
+    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x190
+    '　','　','　','　',    '　','　','　','　',    '　','　')                                  # 0x1A0
 
 BGM_Tracks = (
     "Ahead on our way", "The Fierce Battle", "A Presentiment", "Go Go Boko!",
@@ -253,9 +287,9 @@ class FF5Reader(QMainWindow):
         generate_glyphs(ROM, glyph_sprites, 0x11F000)
         generate_glyphs(ROM2, glyph_sprites2, 0x11F000)
         generate_glyphs_large(ROM2, glyph_sprites_large, 0x03E800)
-        generate_glyphs_large(ROM2, glyph_sprites_large2, 0x1BD000, 0x1AA)
+        generate_glyphs_large(ROM2, glyph_sprites_kanji, 0x1BD000, 0x1AA)
         global zone_names
-        zone_names = make_string_img_list_indirect(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200)
+        zone_names = make_string_img_list_indirect(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200, large=True)
         items = make_string_img_list(0x111380, 9, 256)
         magics = make_string_img_list(0x111C80, 6, 87)
         more_magics = make_string_img_list(0x111E8A, 9, 73)
@@ -352,8 +386,8 @@ class FF5Reader(QMainWindow):
         glyph_frame3.setLayout(glyph_layout3)
 
         glyph_layout4 = QGridLayout()
-        for i in range(len(glyph_sprites_large2)):
-            item = glyph_sprites_large2[i]
+        for i in range(len(glyph_sprites_kanji)):
+            item = glyph_sprites_kanji[i]
             pixmap_scaled = item.scaled(item.size() * 2)
             lab = QLabel()
             lab.setPixmap(pixmap_scaled)
@@ -420,7 +454,36 @@ def make_string_img(bytestring, jp=False):
     del painter
     return string, QPixmap.fromImage(img)
 
-def make_string_img_list(start, length, num, start_jp=None, len_jp=None, indirect=False):
+def make_string_img_large(bytestring):
+    if len(bytestring) < 1:
+        raise ValueError('Empty bytestring was passed')
+    string = ""
+    img = QImage(len(bytestring)*16, 14, QImage.Format_RGB16)
+    img.fill(bg_color)
+    painter = QtGui.QPainter(img)
+    it = iter(range(len(bytestring)))
+    x = 0
+    for i in it:
+        j = bytestring[i]
+        if j < 0x1E:
+            string = string + '[0x{:04X}]'.format(int.from_bytes(bytestring[i:i+2],'little'))
+            next(it)
+        elif j == 0x1E:
+            string = string + Glyphs_Kanji[bytestring[i+1]]
+            painter.drawPixmap(x*16, 1, glyph_sprites_kanji[bytestring[i+1]])
+            next(it)
+        elif j == 0x1F:
+            string = string + Glyphs_Kanji[0x100 + bytestring[i+1]]
+            painter.drawPixmap(x*16, 1, glyph_sprites_kanji[0x100 + bytestring[i+1]])
+            next(it)
+        else:
+            string = string + Glyphs_JP_large[j]
+            painter.drawPixmap(x*16, 1, glyph_sprites_large[j])
+        x += 1
+    del painter
+    return string, QPixmap.fromImage(img.copy(0, 0, x*16, 14))
+
+def make_string_img_list(start, length, num, start_jp=None, len_jp=None, indirect=False, large=False):
     start_jp = start if start_jp is None else start_jp
     len_jp = length if len_jp is None else len_jp
     stringlist = []
@@ -429,11 +492,14 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, indirec
         j1 = start + (id*length)
         j2 = start_jp + (id*len_jp)
         string, img = make_string_img(ROM[j1:j1+length])
-        string_JP, img_JP = make_string_img(ROM2[j2:j2+len_jp], jp=True)
+        if large:
+            string_JP, img_JP = make_string_img_large(ROM2[j2:j2+len_jp])
+        else:
+            string_JP, img_JP = make_string_img(ROM2[j2:j2+len_jp], jp=True)
         stringlist.append(["0x{:06X}".format(j1), "0x{0:0{1}X}".format(id, id_digits), string, img, string_JP, img_JP])
     return stringlist
 
-def make_string_img_list_indirect(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None):
+def make_string_img_list_indirect(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None, large=False):
     start_jp = start if start_jp is None else start_jp
     len_jp = length if len_jp is None else len_jp
     start_str = start if start_str is None else start_str
@@ -451,7 +517,10 @@ def make_string_img_list_indirect(start, length, num, start_jp=None, len_jp=None
             break
         try:
             string, img = make_string_img(ROM[en_start:en_end])
-            string_JP, img_JP = make_string_img(ROM2[jp_start:jp_end], jp=True)
+            if large:
+                string_JP, img_JP = make_string_img_large(ROM2[jp_start:jp_end])
+            else:
+                string_JP, img_JP = make_string_img(ROM2[jp_start:jp_end], jp=True)
         except ValueError:
             print("ID: {} \tRef.0x{:06X} 0x{:06X} \tRange EN: 0x{:06X}-0x{:06X} \tRange JP: 0x{:06X}-0x{:06X}".format(id, en, jp, en_start, en_end, jp_start, jp_end))
             raise
