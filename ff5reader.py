@@ -96,6 +96,7 @@ col_palette = [QColor(  0,  0,  0),
                QColor(  0,  0,128,0),
                QColor(128,128,128),
                QColor(255,255,255)]
+bg_color = QColor(0, 0, 128)
 #for i in range(4, 256):
     #col_palette.append(QColor(i, i, i))
 
@@ -134,22 +135,38 @@ glyph_sprites2 = []
 glyph_offset = 0x11F000
 
 Glyphs = [' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',      # 0x00
-          ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',       # 0x10
+          ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',      # 0x10
           'A','B','C','D',    'E','F','G','H',    'I','J','K','L',    'M','N','O','P',      # 0x20
-          'Q','R','S','T',    'U','V','W','X',    'Y','Z','a','b',    'c','d','e','f',      # 0x30
-          'g','h','i','j',    'k','l','m','n',    'o','A','B','C',    'D','E','F','G',      # 0x40
-          'H','I','J','0',    '1','2','3','4',    '5','6','7','8',    '9','_m','_H','_P',   # 0x50
+          'Q','R','S','T','U','V','W','X','Y','Z','[stone]','[toad]','[mini]','[float]','[poison]','[KO]',  # 0x30
+          '[blind]',' ',' ',' ',' ',' ',' ',' ',  ' ',' ',' ',' ',    ' ',' ',' ',' ',      # 0x40
+          ' ',' ',' ','0',    '1','2','3','4',    '5','6','7','8',    '9','_m','_H','_P',   # 0x50
           'A','B','C','D',    'E','F','G','H',    'I','J','K','L',    'M','N','O','P',      # 0x60
           'Q','R','S','T',    'U','V','W','X',    'Y','Z','a','b',    'c','d','e','f',      # 0x70
           'g','h','i','j',    'k','l','m','n',    'o','p','q','r',    's','t','u','v',      # 0x80
-          'w','x','y','z',    'il','it','','li',  'll','\'','"',':',   ';',',','(',')',     # 0x90
+          'w','x','y','z',    'il','it',' ','li', 'll','\'','"',':',   ';',',','(',')',     # 0x90
           '/','!','?','.',    'ti','fi','Bl','a', 'pe','l','\'','"',   'if','lt','tl','ir', # 0xA0
           'tt','や','ユ','ゆ', 'ヨ', 'よ', 'ワ', 'わ', 'ン', 'ん', 'ヲ','を', '[key]', '[shoe]', '[diamond?]', '[hammer]',  # 0xB0
-          '[tent]', '[ribbon]', '[potion]', '[shirt]', '[song]', '-', '[shuriken]', '・・', '[scroll]', '!', '[claw]', '?', '[glove]', 'pickaxe head??', '/', ':',    # 0xC0
+          '[tent]', '[ribbon]', '[potion]', '[shirt]', '♪', '-', '[shuriken]', '‥', '[scroll]', '!', '[claw]', '?', '[glove]', '%', '/', ':',    # 0xC0
           '「', '」', '0', 'A', 'B', 'X', 'Y', 'L', 'R', 'E', 'H', 'M', 'P', 'S', 'C', 'T',    # 0xD0
-          ' ', ' ', '+', '[sword]', '[wh.mag]', '[blk.mag]', '[t.mag]', '[knife]', '[spear]', '[axe]', '[katana]', '[rod]', '[staff]', '[bow]', '[harp]', '[whip]',   # 0xE0
+          '↑', '→', '+', '[sword]', '[wh.mag]', '[blk.mag]', '[t.mag]', '[knife]', '[spear]', '[axe]', '[katana]', '[rod]', '[staff]', '[bow]', '[harp]', '[whip]',   # 0xE0
           '[bell]', '[shield]', '[helmet]', '[armor]', '[ring]', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ']    # F0
-Glyphs_JP = Glyphs
+Glyphs_JP = list(Glyphs)  # Transcription of the japanese glyph tiles
+Glyphs_JP[0x60:0xCD] = \
+    ['ハ','は','ヒ','ひ',  'フ','ふ','ヘ','へ',  'ホ','ほ','カ','か',  'キ','き','ク','く',  # 0x60
+     'ケ','け','コ','こ',  'サ','さ','シ','し',  'ス','す','セ','せ',  'ソ','そ','タ','た',  # 0x70
+     'チ','ち','ツ','つ',  'テ','て','ト','と',  'ウ','う','ア','あ',  'イ','い','エ','え',  # 0x80
+     'オ','お','ナ','な',  'ニ','に','ヌ','ぬ',  'ネ','ね','ノ','の',  'マ','ま','ミ','み',  # 0x90
+     'ム','む','メ','め',  'モ','も','ラ','ら',  'リ','り','ル','る',  'レ','れ','ロ','ろ',  # 0xA0
+     'ヤ','や','ユ','ゆ',  'ヨ','よ','ワ','わ',  'ン','ん','ヲ','を',  'ッ','っ','ャ','ゃ',  # 0xB0
+     'ュ','ゅ','ョ','ょ',  'ァ','ー','ィ', '‥',  'ぅ','！','ェ','？',  'ォ']              # 0xC0
+Glyphs_JP[0xE3] = '[洋剣]'
+Glyphs_JP[0xE7:0xF0] = ['[刂]', '[槍]', '[鉞]', '[刀]', '[棒]', '[杖]', '[弓]', '♪', '[鞭]']
+Glyphs_JP2 = list(Glyphs_JP)  # Japanese glyphs using the dakuten encoding
+Glyphs_JP2[0x20:0x52] = \
+    ['バ','ば','ビ','び',  'ブ','ぶ','ベ','べ',  'ボ','ぼ','ガ','が',  'ギ','ぎ','グ','ぐ',  # 0x20
+     'ゲ','げ','ゴ','ご',  'ザ','ざ','ジ','じ',  'ズ','ず','ゼ','ぜ',  'ゾ','ぞ','ダ','だ',  # 0x30
+     'ヂ','ぢ','ヅ','づ',  'デ','で','ド','ど',             # 0x40-0x48
+     'パ','ぱ','ピ','ぴ',  'プ','ぷ','ペ','ぺ',  'ポ','ぽ']  # 0x48-0x52
 
 BGM_Tracks = ["Ahead on our way", "The Fierce Battle", "A Presentiment", "Go Go Boko!",
               "Pirates Ahoy", "Tenderness in the Air", "Fate in Haze", "Moogle theme",
@@ -170,26 +187,8 @@ BGM_Tracks = ["Ahead on our way", "The Fierce Battle", "A Presentiment", "Go Go 
               "The Decisive Battle", "The Silent Beyond", "Dear Friends", "Final Fantasy",
               "A New Origin", "Chirping sound"]
 
-def MakeStringList(start, end, length):
-    stringlist = []
-    id = 0
-    ids = (end-start)//length
-    id_digits = hex_length(ids-1)
-    for i in range(start, end, length):
-        stringROM = ROM[i:i+length]
-        string = ""
-        for j in stringROM:
-            string = string + Glyphs[j]
-        stringlist.append(("0x{:06X}".format(i), "0x{0:0{1}X}".format(id, id_digits), string))
-        id += 1
-    return stringlist
-
-#items = MakeStringImgList(0x111380, 0x111C80, 9)
-#magics = MakeStringList(0x111C80, 0x111E8A, 6)
-#more_magics = MakeStringList(0x111E8A, 0x11211B, 9)
-#enemy_names = MakeStringList(0x200050, 0x200F50, 10)
 stringlist_headers = ["Address", "ID", "Name"]
-imglist_headers = stringlist_headers + ["Img", "Img JP"]
+imglist_headers = stringlist_headers + ["Img", "Name JP", "Img JP"]
 
 zone_names_count = 0x100
 zone_names = []
@@ -300,7 +299,7 @@ def MakeTable(headers, items, sortable=False, row_labels=True):
             lab = QLabel()
             lab.setPixmap(pixmap_scaled)
             table.setCellWidget(row, col, lab)
-        else:
+        elif type(item) != type(None):
             q_item = QTableWidgetItem(item)
             if item[:2] == "0x":
                 q_item.setFont(monofont)
@@ -321,10 +320,10 @@ class FF5Reader(QMainWindow):
 
         self._generate_glyphs(ROM, glyph_sprites)
         self._generate_glyphs(ROM2, glyph_sprites2)
-        items = self.MakeStringImgList(0x111380, 0x111C80, 9)
-        magics = self.MakeStringImgList(0x111C80, 0x111E8A, 6)
-        more_magics = self.MakeStringImgList(0x111E8A, 0x11211B, 9)
-        enemy_names = self.MakeStringImgList(0x200050, 0x200F50, 10)
+        items = self.MakeStringImgList(0x111380, 9, 256)
+        magics = self.MakeStringImgList(0x111C80, 6, 87)
+        more_magics = self.MakeStringImgList(0x111E8A, 9, 73)
+        enemy_names = self.MakeStringImgList(0x200050, 10, 0x180, 0x105C00, 8)
 
         glyph_layout = QGridLayout()
         for i in range(len(glyph_sprites)):
@@ -372,29 +371,17 @@ class FF5Reader(QMainWindow):
             #print("Tile address: 0x{:06x}".format(j))
             spritelist.append(create_tile(rom[j:j+16]))
 
-    def MakeStringImgList(self, start, end, length):
-        stringlist = []
-        id = 0
-        ids = (end-start)//length
-        id_digits = hex_length(ids-1)
-        for i in range(start, end, length):
-            stringROM = ROM[i:i+length]
-            string = ""
-            img = QImage(length*8, 10, QImage.Format_RGB16)
-            img.fill(QColor(0,0,128))
-            painter = QtGui.QPainter(img)
-            for x, j in enumerate(stringROM):
-                string = string + Glyphs[j]
-                painter.drawPixmap(x*8, 1, glyph_sprites[j])
-            del painter
-            stringROM_JP = ROM2[i:i+length]
-            string_JP = ""
-            img_JP = QImage(length*8, 10, QImage.Format_RGB16)
-            img_JP.fill(QColor(0,0,128))
-            painter = QtGui.QPainter(img_JP)
-            for x, j in enumerate(stringROM_JP):
-                string_JP = string_JP + Glyphs_JP[j]
-                if j < 0x53:
+    def _generate_image_string(self, bytestring, jp=False):
+        if len(bytestring) < 1:
+            raise ValueError('Empty bytestring was passed')
+        string = ""
+        img = QImage(len(bytestring)*8, 10, QImage.Format_RGB16)
+        img.fill(bg_color)
+        painter = QtGui.QPainter(img)
+        if jp:
+            for x, j in enumerate(bytestring):
+                string = string + Glyphs_JP2[j]
+                if j < 0x52:
                     if j > 0x48:
                         painter.drawPixmap(x*8, 2, glyph_sprites2[j+0x17])
                         painter.drawPixmap(x*8+1,-5, glyph_sprites2[0x52])
@@ -403,9 +390,29 @@ class FF5Reader(QMainWindow):
                         painter.drawPixmap(x*8+1,-6, glyph_sprites2[0x51])
                 else:
                     painter.drawPixmap(x*8, 2, glyph_sprites2[j])
-            del painter
-            stringlist.append(("0x{:06X}".format(i), "0x{0:0{1}X}".format(id, id_digits), string, QPixmap.fromImage(img),  QPixmap.fromImage(img_JP)))
+        else:
+            for x, j in enumerate(bytestring):
+                string = string + Glyphs[j]
+                painter.drawPixmap(x*8, 1, glyph_sprites[j])
+        del painter
+        return string, QPixmap.fromImage(img)
+
+    def MakeStringImgList(self, start, length, num, start_jp=None, len_jp=None):
+        start_jp = start if start_jp is None else start_jp
+        len_jp = length if len_jp is None else len_jp
+        stringlist = []
+        id = 0
+        id_digits = hex_length(num-1)
+        for i in range(start, start+(num*length), length):
+            string, img = self._generate_image_string(ROM[i:i+length])
+            stringlist.append(["0x{:06X}".format(i), "0x{0:0{1}X}".format(id, id_digits), string, img, None, None])
             id += 1
+        if start_jp and len_jp:
+            id = 0
+            for i in range(start_jp, start_jp+(num*len_jp), len_jp):
+                string_JP, img_JP = self._generate_image_string(ROM2[i:i+len_jp], jp=True)
+                stringlist[id][4:] = [string_JP, img_JP]
+                id += 1
         return stringlist
 
 
