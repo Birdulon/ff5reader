@@ -94,6 +94,7 @@ col_palette = [QColor(0, 0, 0), QColor(0, 0, 128, 0),
 bg_color = QColor(0, 0, 128)
 
 glyph_sprites = []
+glyph_sprites_dialogue = []
 glyph_sprites_jp = []
 glyph_sprites_large = []
 glyph_sprites_kanji = []
@@ -119,6 +120,7 @@ class FF5Reader(QMainWindow):
     def __init__(self):
         QMainWindow.__init__(self, None)
         generate_glyphs(ROM, glyph_sprites, 0x11F000)
+        generate_glyphs_large(ROM, glyph_sprites_dialogue, 0x03E800)
         generate_glyphs(ROM2, glyph_sprites_jp, 0x11F000)
         generate_glyphs_large(ROM2, glyph_sprites_large, 0x03E800)
         generate_glyphs_large(ROM2, glyph_sprites_kanji, 0x1BD000, 0x1AA)
@@ -189,13 +191,14 @@ class FF5Reader(QMainWindow):
                         npc_layers[-1].append("0x{:0{}X}".format(val, z[1]*2))
             j += z[1]
 
-        dialogue = make_string_img_list(0x2013F0, 3, 0x500, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True)  # start_str=0x210000
+        dialogue = make_string_img_list(0x2013F0, 3, 0x500, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros=True)  # start_str=0x210000
 
         self.tabwidget = QTabWidget()
         self.enemy_sprites = QFrame()
         self.tabwidget.addTab(make_pixmap_table(glyph_sprites, 4), "Glyphs (EN)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_dialogue, 2), "Glyphs (Dialogue EN)")
         self.tabwidget.addTab(make_pixmap_table(glyph_sprites_jp, 4), "Glyphs (JP)")
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_large, 2), "Glyphs (Large)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_large, 2), "Glyphs (Large JP)")
         self.tabwidget.addTab(make_pixmap_table(glyph_sprites_kanji, 2), "Glyphs (Kanji)")
         self.tabwidget.addTab(self.enemy_sprites, "Enemy Sprites")
         self.tabwidget.addTab(make_table(zone_headers, zone_data, True), "Zones")
@@ -215,10 +218,10 @@ class FF5Reader(QMainWindow):
         self.show()
 
 
-def generate_glyphs(rom, spritelist, offset, num=0x100):
+def generate_glyphs(rom, spritelist, offset, num=0x100, palette=col_palette):
     for i in range(num):
         j = offset + (i*16)
-        spritelist.append(create_tile(rom[j:j+16], col_palette))
+        spritelist.append(create_tile(rom[j:j+16], palette))
 
 def generate_glyphs_large(rom, spritelist, offset, num=0x100):
     for i in range(num):
@@ -251,25 +254,69 @@ def make_string_img(bytestring, jp=False):
     del painter
     return string, QPixmap.fromImage(img)
 
-def dialogue_preprocessor(bytestring, expand=True):
-    out = [[]]
+def dialogue_preprocessor(bytestring, macros=False):
+    '''
+    This deals with pesky control codes that lump in the following byte.
+    Additionally, it can expand the macros used in JP dialogue.
+    '''
+    out = []
     bytes = iter(bytestring)
     for b in bytes:
         if b in const.DoubleChars:
             b2 = next(bytes)
-            out[-1].append((b<<8) + b2)
-        elif expand:
-            if b in const.Dialogue_Macros:
-                out[-1].extend(const.Dialogue_Macros[b])
-            else:
-                out[-1].append(b)
+            out.append((b<<8) + b2)
+        elif macros and b in const.Dialogue_Macros:
+                out.extend(const.Dialogue_Macros[b])
+        else:
+            out.append(b)
     return out
 
-
-def make_string_img_large(bytestring):
+def make_string_img_multiline(bytestring):
+    '''
+    This is basically make_string_img_large() but for english dialogue.
+    English characters have varying widths, so instead of x being an index it's a pixel value. Magic, eh?
+    '''
     if len(bytestring) < 1:
         raise ValueError('Empty bytestring was passed')
-    line = dialogue_preprocessor(bytestring)[0]
+
+    string = ""
+    max_width = 32*8  # I need to confirm this
+    rows = 32  # This is just for testing
+    img = QImage(max_width, rows*16, QImage.Format_RGB16)
+    img.fill(bg_color)
+    painter = QtGui.QPainter(img)
+
+    x = xmax = y = 0
+    for j in bytestring:
+        if x >= max_width:  # Wrap on long line
+            string += '[wr]\n'
+            xmax = max_width  # Can't go higher than this anyway
+            x = 0
+            y += 1
+        if j == 0x01:  # Line break
+            string += '[br]\n'
+            xmax = x if x > xmax else xmax
+            x = 0
+            y += 1
+            continue
+        elif j < 0x13 or j > 0xFF:  # Everything remaining outside this is a control char
+            string += '[0x{:02X}]'.format(j)
+            continue
+        else:
+            string += const.Glyphs[j]
+            painter.drawPixmap(x, (y*16)+4, glyph_sprites_dialogue[j])
+            x += const.Dialogue_Width[j]
+    del painter
+    xmax = x if x > xmax else xmax
+    return string, QPixmap.fromImage(img.copy(0, 0, xmax, (y+1)*16))
+
+def make_string_img_large(bytestring):
+    '''
+    This is how we decipher dialogue data, which has multiple lines among other things
+    '''
+    if len(bytestring) < 1:
+        raise ValueError('Empty bytestring was passed')
+
     string = ""
     cols = 16  # This is the maximum dialogue glyphs per row in JP
     rows = 32  # This is just for testing
@@ -277,40 +324,34 @@ def make_string_img_large(bytestring):
     img.fill(bg_color)
     painter = QtGui.QPainter(img)
 
-    x = 0
-    xmax = 0
-    y = 0
-    try:
-        for j in line:
-            # Is 0x00 a wait for input marker?
-            if x >= 16:
-                string += '[wr]\n'
-                xmax = 16
-                x = 0
-                y += 1
-            if j == 0x01:
-                string += '[br]\n'
-                y += 1
-                xmax = x if x > xmax else xmax
-                x = 0
-                continue
-            elif 0x1E00 <= j < 0x2000:
-                string += const.Glyphs_Kanji[j-0x1E00]
-                painter.drawPixmap(x*16, (y*16)+2, glyph_sprites_kanji[j-0x1E00])
-            elif (j < 0x1E):
-                string += '[0x{:02X}]'.format(j)
-                continue
-            else:
-                string += const.Glyphs_JP_large[j]
-                painter.drawPixmap(x*16, (y*16)+2, glyph_sprites_large[j])
-            x += 1
-    except (StopIteration, IndexError):
-        pass
+    x = xmax = y = 0
+    for j in bytestring:
+        if x >= cols:  # Wrap on long line
+            string += '[wr]\n'
+            xmax = cols  # Can't go higher than this anyway
+            x = 0
+            y += 1
+        if j == 0x01:  # Line break
+            string += '[br]\n'
+            xmax = x if x > xmax else xmax
+            x = 0
+            y += 1
+            continue
+        elif 0x1E00 <= j < 0x1FAA:  # Kanji live in this range
+            string += const.Glyphs_Kanji[j-0x1E00]
+            painter.drawPixmap(x*16, (y*16)+2, glyph_sprites_kanji[j-0x1E00])
+        elif j < 0x13 or j > 0xFF:  # Everything remaining outside this is a control char
+            string += '[0x{:02X}]'.format(j)
+            continue
+        else:
+            string += const.Glyphs_JP_large[j]
+            painter.drawPixmap(x*16, (y*16)+2, glyph_sprites_large[j])
+        x += 1
     del painter
     xmax = x if x > xmax else xmax
     return string, QPixmap.fromImage(img.copy(0, 0, xmax*16, (y+1)*16))
 
-def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None, indirect=False, large=False):
+def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None, indirect=False, large=False, macros=False):
     start_jp = start if start_jp is None else start_jp
     len_jp = length if len_jp is None else len_jp
     start_str = start if start_str is None else start_str
@@ -332,16 +373,20 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
                 break
             try:
                 if en_end > en_start:
-                    string, img = make_string_img(ROM[en_start:en_end])
+                    if macros:
+                        string, img = make_string_img_multiline(dialogue_preprocessor(ROM[en_start:en_end]))
+                    else:
+                        string, img = make_string_img(ROM[en_start:en_end])
                 else:
                     string = ''
                     img = None
 
                 if jp_end > jp_start:
+                    bytestring = dialogue_preprocessor(ROM2[jp_start:jp_end], macros)
                     if large:
-                        string_JP, img_JP = make_string_img_large(ROM2[jp_start:jp_end])
+                        string_JP, img_JP = make_string_img_large(bytestring)
                     else:
-                        string_JP, img_JP = make_string_img(ROM2[jp_start:jp_end], jp=True)
+                        string_JP, img_JP = make_string_img(bytestring, jp=True)
                 else:
                     string_JP = ''
                     img_JP = None

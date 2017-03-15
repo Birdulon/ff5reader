@@ -151,6 +151,18 @@ Dialogue_Macros = {
     }
 DoubleChars = [0x17, 0x1E, 0x1F]  # 0x1E and 0x1F are kanji, 0x17 is a pause marker
 
+#EN_Halfwidth = [0xFF, 0x99, 0x9B, 0x9C, 0x9D, 0xA3, 0xD2]
+Dialogue_Width = [4 for i in range(256)]
+Dialogue_Width[0x50:0xB1] = [a+1 for a in [
+    5, 2, 6, 6,     5, 6, 6, 6,     6, 6, 6, 6,     6, 8, 8, 8,  # 0x50
+    6, 6, 5, 6,     5, 5, 6, 6,     2, 6, 7, 5,     10,7, 6, 6,  # 0x60
+    6, 6, 6, 6,     6, 6, 10,6,     6, 6, 6, 6,     5, 6, 6, 5,  # 0x70
+    6, 6, 2, 5,     6, 2, 10,6,     6, 6, 6, 6,     5, 4, 6, 6,  # 0x80
+    10,6, 6, 6,     5, 7, 6, 5,     5, 2, 5, 2,     2, 2, 3, 3,  # 0x90
+    5, 2, 6, 2,     7, 8, 0, 0,     6, 9, 2, 5,     8, 7, 7, 8,  # 0xA0
+    9
+    ]]
+
 BGM_Tracks = (
     "Ahead on our way", "The Fierce Battle", "A Presentiment", "Go Go Boko!",
     "Pirates Ahoy", "Tenderness in the Air", "Fate in Haze", "Moogle theme",
