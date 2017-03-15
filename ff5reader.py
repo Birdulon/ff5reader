@@ -251,100 +251,64 @@ def make_string_img(bytestring, jp=False):
     del painter
     return string, QPixmap.fromImage(img)
 
+def dialogue_preprocessor(bytestring, expand=True):
+    out = [[]]
+    bytes = iter(bytestring)
+    for b in bytes:
+        if b in const.DoubleChars:
+            b2 = next(bytes)
+            out[-1].append((b<<8) + b2)
+        elif expand:
+            if b in const.Dialogue_Macros:
+                out[-1].extend(const.Dialogue_Macros[b])
+            else:
+                out[-1].append(b)
+    return out
+
+
 def make_string_img_large(bytestring):
     if len(bytestring) < 1:
         raise ValueError('Empty bytestring was passed')
+    line = dialogue_preprocessor(bytestring)[0]
     string = ""
-    rows = 20  # This is just for testing
-    img = QImage(len(bytestring)*16, 14*rows, QImage.Format_RGB16)
+    cols = 16  # This is the maximum dialogue glyphs per row in JP
+    rows = 32  # This is just for testing
+    img = QImage(cols*16, rows*16, QImage.Format_RGB16)
     img.fill(bg_color)
     painter = QtGui.QPainter(img)
 
-    it = iter(range(len(bytestring)))
     x = 0
-    xmax = x
+    xmax = 0
     y = 0
-    tabstop = 0
     try:
-        for i in it:
-            j = bytestring[i]
-            '''
-            There's a lot of dialogue substitutions, this is going to be annoying and/or messy.
-            TODO: The best way of going about this would be preprocessing the string, I think.
-            Is 0x00 a wait for input marker?
-            0x03 is クリスタル
-            0x0A is a speaker tab, perhaps linebreak as well?
-            0x0D appears to expand to 風の神殿
-            : (0xCF) appears to expand to って
-            S (0xDD) to ……
-            C (0xDE) to だいじょうぶ
-            T (0xDF) to は、
-            ◯ (0xE4) appears to expand to して
-            F (0xE6) appears to expand to otousan (お父様)
-            ・ (0xE8) appears to expand to です
-            % (0xCD) to !!
-            °C (0xE7) to !?
-            '''
+        for j in line:
+            # Is 0x00 a wait for input marker?
+            if x >= 16:
+                string += '[wr]\n'
+                xmax = 16
+                x = 0
+                y += 1
             if j == 0x01:
-                string = string + '\n[0x01]'
+                string += '[br]\n'
                 y += 1
                 xmax = x if x > xmax else xmax
                 x = 0
                 continue
-            elif j == 0x09:
-                string = string + '\t[0x09]'
-                x = tabstop
+            elif 0x1E00 <= j < 0x2000:
+                string += const.Glyphs_Kanji[j-0x1E00]
+                painter.drawPixmap(x*16, (y*16)+2, glyph_sprites_kanji[j-0x1E00])
+            elif (j < 0x1E) or ((j > 0xD5) and (j not in const.Dialogue_Exceptions)):
+                string += '[0x{:02X}]'.format(j)
                 continue
-            elif j == 0x0A:
-                if x != 0:
-                    y += 1
-                    xmax = x if x > xmax else xmax
-                    string = string + '\n'
-                string = string + '\t[0x0A]'
-                x = tabstop
-                continue
-            elif j == 0x19:
-                # Lenna is speaking
-                string = string + "[レナ「]"
-                painter.drawPixmap(0*16, (y*14)+1, glyph_sprites_large[0xAC])
-                painter.drawPixmap(1*16, (y*14)+1, glyph_sprites_large[0x92])
-                painter.drawPixmap(2*16, (y*14)+1, glyph_sprites_large[0xD0])
-                x += 3
-                tabstop = x
-                continue
-            elif j == 0x1B:
-                # Faris is speaking
-                string = string + "[ファリス「]"
-                painter.drawPixmap(0*16, (y*14)+1, glyph_sprites_large[0x64])
-                painter.drawPixmap(1*16, (y*14)+1, glyph_sprites_large[0xC4])
-                painter.drawPixmap(2*16, (y*14)+1, glyph_sprites_large[0xA8])
-                painter.drawPixmap(3*16, (y*14)+1, glyph_sprites_large[0x78])
-                painter.drawPixmap(4*16, (y*14)+1, glyph_sprites_large[0xD0])
-                x += 5
-                tabstop = x
-                continue
-            elif j < 0x1E:
-                string = string + '[0x{:02X}]'.format(j)
-                continue
-            elif j == 0x1E:
-                string = string + const.Glyphs_Kanji[bytestring[i+1]]
-                painter.drawPixmap(x*16, (y*14)+1, glyph_sprites_kanji[bytestring[i+1]])
-                next(it)
-            elif j == 0x1F:
-                string = string + const.Glyphs_Kanji[0x100 + bytestring[i+1]]
-                painter.drawPixmap(x*16, (y*14)+1, glyph_sprites_kanji[0x100 + bytestring[i+1]])
-                next(it)
             else:
-                string = string + const.Glyphs_JP_large[j]
-                painter.drawPixmap(x*16, (y*14)+1, glyph_sprites_large[j])
+                string += const.Glyphs_JP_large[j]
+                painter.drawPixmap(x*16, (y*16)+2, glyph_sprites_large[j])
             x += 1
-            if (j == 0xD0) or (j == 0xE5):
-                tabstop = x
     except (StopIteration, IndexError):
         pass
     del painter
     xmax = x if x > xmax else xmax
-    return string, QPixmap.fromImage(img.copy(0, 0, xmax*16, (y+1)*14))
+    return string, QPixmap.fromImage(img.copy(0, 0, xmax*16, (y+1)*16))
 
 def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None, indirect=False, large=False):
     start_jp = start if start_jp is None else start_jp
