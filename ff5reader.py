@@ -205,7 +205,7 @@ class FF5Reader(QMainWindow):
         self.tabwidget.addTab(make_table(imglist_headers, magics, row_labels=False), "Magics")
         self.tabwidget.addTab(make_table(imglist_headers, more_magics, row_labels=False), "More Magics")
         self.tabwidget.addTab(make_table(imglist_headers, enemy_names, row_labels=False), "Enemy Names")
-        self.tabwidget.addTab(make_table(imglist_headers, dialogue), "Dialogue")
+        self.tabwidget.addTab(make_table(imglist_headers+['JP address'], dialogue), "Dialogue")
 
         layout = QHBoxLayout()
         layout.addWidget(self.tabwidget)
@@ -297,7 +297,7 @@ def make_string_img_large(bytestring):
             elif 0x1E00 <= j < 0x2000:
                 string += const.Glyphs_Kanji[j-0x1E00]
                 painter.drawPixmap(x*16, (y*16)+2, glyph_sprites_kanji[j-0x1E00])
-            elif (j < 0x1E) or ((j > 0xD5) and (j not in const.Dialogue_Exceptions)):
+            elif (j < 0x1E):
                 string += '[0x{:02X}]'.format(j)
                 continue
             else:

@@ -43,28 +43,28 @@ Glyphs_JP_large[0xE0:0xEB] = ['←','→','+','、',  '◯', '『', 'Ｆ', '°C'
 Glyphs_JP_large[0xFF] = '　'
 
 Glyphs_Kanji1 = (  # TODO: finish this
-    '王','行','力','様',    '　','世','界','　',    '入','城','　','士',    '　','　','海','父',  # 0x000
-    '人','見','　','　',    '大','　','　','何',    '　','　','　','　',    '言','　','　','　',  # 0x010
-    '　','心','間','　',    '風','　','　','　',    '　','　','　','　',    '火','　','　','　',  # 0x020
+    '王','行','力','様',    '飛','世','界','封',    '入','城','竜','士',    '船','印','海','父',  # 0x000
+    '人','見','魔','物',    '大','　','　','何',    '　','　','　','手',    '言','　','　','　',  # 0x010
+    '　','心','間','　',    '風','　','　','　',    '　','　','　','兵',    '火','　','　','　',  # 0x020
     '　','　','　','　',    '　','女','　','　',    '地','　','　','　',    '　','　','　','　',  # 0x030
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','一','　','　',  # 0x040
     '　','　','神','　',    '　','　','殿','　',    '　','　','　','　',    '　','子','　','　',  # 0x050
-    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x060
+    '　','　','書','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x060
     '　','　','階','　',    '　','　','　','　',    '　','　','土','　',    '　','　','　','　',  # 0x070
 
-    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x080
+    '　','　','　','　',    '　','　','古','図',    '　','　','　','　',    '　','　','　','　',  # 0x080
     '　','　','　','　',    '　','下','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x090
-    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x0A0
+    '　','　','　','　',    '　','　','　','舘',    '　','　','　','　',    '　','　','　','　',  # 0x0A0
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','運','河','　',  # 0x0B0
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','少','　','　',  # 0x0C0
-    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x0D0
+    '　','　','　','　',    '　','　','　','代',    '　','　','　','　',    '　','　','　','　',  # 0x0D0
     '　','　','　','　',    '　','博','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x0E0
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x0F0
 
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x100
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x110
-    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x120
-    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x130
+    '次','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x120
+    '　','　','　','　',    '　','　','　','　',    '元','　','　','　',    '　','　','　','　',  # 0x130
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x140
     '炎','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x150
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x160
@@ -79,75 +79,77 @@ Dialogue_Macros = {
     # Is 0x00 a wait for input marker?
     # 0x01 is linebreak
     0x02: [0x20, 0xBC, 0x82], # 0x02 expands to Bartz's name バッツ. Used for his dialogue in EN, only used for other chars in JP.
-    0x03: [0x6E, 0xA8, 0x78, 0x7E, 0xAA],       # 0x03 is クリスタル
-    0x04: [0x7E, 0x8C, 0x6E, 0xC5, 0xB8],       # expands to タイクーン
-    0x06: [0x37, 0xBF],                         # expands to じゃ
-    0x07: [0x8D, 0xAB],                         # expands to いる
-    0x08: [0xFF, 0xFF, 0xFF, 0xFF],             # 4 spaces
-    0x09: [0xFF, 0xFF, 0xFF],                   # 3 spaces
-    0x0A: [0xFF, 0xFF],                         # 2 spaces
-    # 0x0B - monster? fiend?
-    # 0x0C appears to be a pause in delivery
-    0x0D: [0x1E24, 0x9B, 0x1E52, 0x1E57],       # expands to 風の神殿
-    # 0x0E - hiryuu?
-    # 0x0F
+    0x03: [0x6E, 0xA8, 0x78, 0x7E, 0xAA],               # 0x03 is クリスタル
+    0x04: [0x7E, 0x8C, 0x6E, 0xC5, 0xB8],               # expands to タイクーン
+    0x06: [0x37, 0xBF],                                 # expands to じゃ
+    0x07: [0x8D, 0xAB],                                 # expands to いる
+    0x08: [0xFF, 0xFF, 0xFF, 0xFF],                     # 4 spaces
+    0x09: [0xFF, 0xFF, 0xFF],                           # 3 spaces
+    0x0A: [0xFF, 0xFF],                                 # 2 spaces
+    0x0B: [0x1E12, 0x1E13],                             # expands to 魔物
+    # 0x0C appears to be a pause in delivery - affects previous char
+    0x0D: [0x1E24, 0x9B, 0x1E52, 0x1E57],               # expands to 風の神殿
+    0x0E: [0x1E04, 0x1E0A],                             # expands to 飛竜
+    # 0x0F - unknown (invisible control char)
     # 0x10 is a gil substitution
     # 0x11 and 0x12 appear to be item (obtained) substitutions
-
-    0x14: [0x76, 0x46, 0xD0],                   # Cid speaking - シド「
-    0x15: [0x9E, 0x46, 0xD0],                   # Mid speaking - ミド「
-    0x16: [0x1E05, 0x1E06],                     # expands to 世界
-    # 0x17 uses the next byte for something
-
-    0x19: [0xAC, 0x92, 0xD0],                   # Lenna speaking - レナ「
-    0x1A: [0x2A, 0xA6, 0x64, 0xD0],             # Galuf speaking - ガラフ「
-    0x1B: [0x64, 0xC4, 0xA8, 0x78, 0xD0],       # Faris speaking - ファリス「
-    0x1C: [0x6E, 0xAA, 0xAA, 0xD0],             # Krile/Kara speaking - クルル「
-
+    0x13: [0x1E07, 0x1E0D],                             # expands to 封印
+    0x14: [0x76, 0x46, 0xD0],                           # Cid speaking - シド「
+    0x15: [0x9E, 0x46, 0xD0],                           # Mid speaking - ミド「
+    0x16: [0x1E05, 0x1E06],                             # expands to 世界
+    # 0x17 uses the next byte for pause duration (seconds?)
+    0x18: [0x8E, 0x6E, 0x78, 0x44, 0x78],               # expands to エクスデス
+    0x19: [0xAC, 0x92, 0xD0],                           # Lenna speaking - レナ「
+    0x1A: [0x2A, 0xA6, 0x64, 0xD0],                     # Galuf speaking - ガラフ「
+    0x1B: [0x64, 0xC4, 0xA8, 0x78, 0xD0],               # Faris speaking - ファリス「
+    0x1C: [0x6E, 0xAA, 0xAA, 0xD0],                     # Krile/Kara speaking - クルル「
+    0x1D: [0x91, 0x37, 0x8D, 0x81, 0xBF, 0xB9],         # expands to おじいちゃん
     # 0x1E-0x1F form kanji with the next byte
     # 0x20-0xCC are standard character set
-    0xCD: [0xC9, 0xC9],                         # % (0xCD) to !!
-    0xCF: [0xBD, 0x85],                         # : (0xCF) appears to expand to って
+    0xCD: [0xC9, 0xC9],                                 # % (0xCD) to !!
+    # 0xCE is ／
+    0xCF: [0xBD, 0x85],                                 # : (0xCF) appears to expand to って
     # 0xD0-0xD4 are 「」。ＡＢ
-    # 0xD5 is X - or perhaps a 2byte
-
-    0xD9: [0x93, 0x8D],                         # expands to ない
-    0xDD: [0xC7, 0xC7],                         # S (0xDD) to ……
-    0xDE: [0x3F, 0x8D, 0x37, 0xC3, 0x89, 0x25], # C (0xDE) to だいじょうぶ
-    0xDF: [0x61, 0xE3],                         # T (0xDF) to は、
-    0xE0: [0xB9, 0x3F],                         # expands to んだ
-    0xE1: [0x85, 0x8D],                         # expands to てい
-    0xE2: [0x77, 0x7F],                         # expands to した
+    0xD5: [0x1E1B, 0x95, 0x1E08, 0xAD],                 # expands to 手に入れ
+    # 0xD6, 0xD7, 0xD8 are ＹＬＲ
+    0xD9: [0x93, 0x8D],                                 # expands to ない
+    # 0xDA-0xDC are ＨＭＰ
+    0xDD: [0xC7, 0xC7],                                 # S (0xDD) to ……
+    0xDE: [0x3F, 0x8D, 0x37, 0xC3, 0x89, 0x25],         # C (0xDE) to だいじょうぶ
+    0xDF: [0x61, 0xE3],                                 # T (0xDF) to は、
+    0xE0: [0xB9, 0x3F],                                 # expands to んだ
+    0xE1: [0x85, 0x8D],                                 # expands to てい
+    0xE2: [0x77, 0x7F],                                 # expands to した
     # 0xE3 is 、
-    0xE4: [0x77, 0x85],                         # ◯ (0xE4) appears to expand to して
+    0xE4: [0x77, 0x85],                                 # ◯ (0xE4) appears to expand to して
     # 0xE5 is used for Bartz speaking in JP. This only appears as 『
-    0xE6: [0x91, 0x1E0F, 0x1E03],               # F (0xE6) appears to expand to otousan (お父様)
-    0xE7: [0xC9, 0xCB],                         # °C (0xE7) to !? - yes this is the wrong order interrobang
-    0xE8: [0x45, 0x79],                         # ・ (0xE8) appears to expand to です
+    0xE6: [0x91, 0x1E0F, 0x1E03],                       # F (0xE6) appears to expand to otousan (お父様)
+    0xE7: [0xC9, 0xCB],                                 # °C (0xE7) to !? - yes this is the wrong order interrobang
+    0xE8: [0x45, 0x79],                                 # ・ (0xE8) appears to expand to です
     # 0xE9, 0xEA are （）
-    0xEB: [0x73, 0x9B],                         # expands to この
-    # 0xEC - used in "power of crystal" context, need to confim wording ingame
-    0xEF: [0x1E1C, 0xBD, 0x85],                 # expands to 言って
-    # 0xF0 - soldier speaking
-    0xF1: [0x6B, 0xA7],                         # expands to から
-    # 0xF2 queen? doctor? hakase?
-    0xF3: [0x1E0E, 0x3D, 0x6F],                 # expands to 海ぞく
-
-    0xF5: [0x2B, 0xE3],                         # expands to が、
-    # 0xF6 see dialogue 0x0A3, 0x0A4, 0x0B6 - almost certainly たち
-    0xF7: [0x7F, 0x9B],                         # expands to たの
-    0xF8: [0x9D, 0x79],                         # expands to ます
-    0xF9: [0x6F, 0x3F, 0x75, 0x8D],             # expands to ください
-    0xFA: [0x6B, 0xBD, 0x7F],                   # expands to かった
-    # 0xFB - used in received item context, lenna being poisoned - maybe a sound trigger?
-    0xFC: [0x95, 0xE3],                         # expands to に、
-
+    0xEB: [0x73, 0x9B],                                 # expands to この
+    0xEC: [0x9B, 0x1E02],                               # expands to の力
+    0xED: [0x70, 0xAA, 0x2A, 0xC5],                     # expands to ケルガー
+    0xEE: [0x1E86, 0x1ED7, 0x1E87, 0x1E62, 0x1EA7],     # expands to 古代図書舘 (ancient library?)
+    0xEF: [0x1E1C, 0xBD, 0x85],                         # expands to 言って
+    0xF0: [0x1E2B, 0x1E0B, 0xD0],                       # soldier speaking - 兵士「
+    0xF1: [0x6B, 0xA7],                                 # expands to から
+    0xF2: [0x1E2C, 0x6A, 0x1E0C],                       # expands to 火カ船
+    0xF3: [0x1E0E, 0x3D, 0x6F],                         # expands to 海ぞく
+    0xF4: [0x8D, 0x37, 0xC3, 0x89],                     # expands to いじょう
+    0xF5: [0x2B, 0xE3],                                 # expands to が、
+    0xF6: [0x7F, 0x81],                                 # expands to たち
+    0xF7: [0x7F, 0x9B],                                 # expands to たの
+    0xF8: [0x9D, 0x79],                                 # expands to ます
+    0xF9: [0x6F, 0x3F, 0x75, 0x8D],                     # expands to ください
+    0xFA: [0x6B, 0xBD, 0x7F],                           # expands to かった
+    0xFB: [0x7F, 0xC9],                                 # expands to た！
+    0xFC: [0x95, 0xE3],                                 # expands to に、
+    0xFD: [0x8D, 0x93, 0x8D, 0x6B, 0xA7, 0x93, 0xB9, 0x3F], # expands to いないからなんだ
+    0xFE: [0x1F20, 0x1F38, 0x9B, 0x61, 0x35, 0x9D],         # expands to 次元のはざま
     # 0xFF is space
     }
-
-Dialogue_Exceptions = [0xDA, 0xDB, 0xDC, 0xE3, 0xE5, 0xE9, 0xEA, 0xFF]
-
-DoubleChars = [0x17, 0x1E, 0x1F]  # 0x1E and 0x1F are kanji, 0x17 is unknown as of yet (invisible)
+DoubleChars = [0x17, 0x1E, 0x1F]  # 0x1E and 0x1F are kanji, 0x17 is a pause marker
 
 BGM_Tracks = (
     "Ahead on our way", "The Fierce Battle", "A Presentiment", "Go Go Boko!",
