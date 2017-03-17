@@ -191,7 +191,7 @@ class FF5Reader(QMainWindow):
                         npc_layers[-1].append("0x{:0{}X}".format(val, z[1]*2))
             j += z[1]
 
-        dialogue = make_string_img_list(0x2013F0, 3, 0x500, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros=True)  # start_str=0x210000
+        dialogue = make_string_img_list(0x2013F0, 3, 0x900, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros=True)  # start_str=0x210000
 
         self.tabwidget = QTabWidget()
         self.enemy_sprites = QFrame()
@@ -202,13 +202,13 @@ class FF5Reader(QMainWindow):
         self.tabwidget.addTab(make_pixmap_table(glyph_sprites_kanji, 2), "Glyphs (Kanji)")
         self.tabwidget.addTab(self.enemy_sprites, "Enemy Sprites")
         self.tabwidget.addTab(make_table(zone_headers, zone_data, True), "Zones")
-        self.tabwidget.addTab(make_table(imglist_headers, zone_names, True), "Zone Names")
+        self.tabwidget.addTab(make_table(imglist_headers, zone_names, True, scale=1), "Zone Names")
         self.tabwidget.addTab(make_table(npc_layer_headers, npc_layers, True), "NPC Layers")
         self.tabwidget.addTab(make_table(imglist_headers, items, row_labels=False), "Items")
         self.tabwidget.addTab(make_table(imglist_headers, magics, row_labels=False), "Magics")
         self.tabwidget.addTab(make_table(imglist_headers, more_magics, row_labels=False), "More Magics")
         self.tabwidget.addTab(make_table(imglist_headers, enemy_names, row_labels=False), "Enemy Names")
-        self.tabwidget.addTab(make_table(imglist_headers+['JP address'], dialogue), "Dialogue")
+        self.tabwidget.addTab(make_table(imglist_headers+['JP address'], dialogue, scale=1), "Dialogue")
 
         layout = QHBoxLayout()
         layout.addWidget(self.tabwidget)
@@ -280,8 +280,8 @@ def make_string_img_multiline(bytestring):
         raise ValueError('Empty bytestring was passed')
 
     string = ""
-    max_width = 32*8  # I need to confirm this
-    rows = 32  # This is just for testing
+    max_width = 32*8  # This seems to check out, but the EN dialogue has linebreaks virtually everywhere anyway
+    rows = 64  # I've seen up to 58 rows. Stay safe.
     img = QImage(max_width, rows*16, QImage.Format_RGB16)
     img.fill(bg_color)
     painter = QtGui.QPainter(img)
@@ -319,7 +319,7 @@ def make_string_img_large(bytestring):
 
     string = ""
     cols = 16  # This is the maximum dialogue glyphs per row in JP
-    rows = 32  # This is just for testing
+    rows = 48  # Maximum observed lines in JP is 36. Stay safe.
     img = QImage(cols*16, rows*16, QImage.Format_RGB16)
     img.fill(bg_color)
     painter = QtGui.QPainter(img)
@@ -373,7 +373,7 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
                 break
             try:
                 if en_end > en_start:
-                    if macros:
+                    if large:
                         string, img = make_string_img_multiline(dialogue_preprocessor(ROM[en_start:en_end]))
                     else:
                         string, img = make_string_img(ROM[en_start:en_end])
@@ -406,7 +406,7 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
             stringlist.append(["0x{:06X}".format(j1), "0x{:0{}X}".format(id, id_digits), string, img, string_JP, img_JP])
     return stringlist
 
-def make_table(headers, items, sortable=False, row_labels=True):
+def make_table(headers, items, sortable=False, row_labels=True, scale=2):
     """
     Helper function to tabulate 2d lists
     """
@@ -422,7 +422,7 @@ def make_table(headers, items, sortable=False, row_labels=True):
     for row, col, item in [(x,y,items[x][y]) for x in range(rows) for y in range(cols)]:
         if type(item) == type(QPixmap()):
             lab = QLabel()
-            lab.setPixmap(item.scaled(item.size() * 2))
+            lab.setPixmap(item.scaled(item.size() * scale))
             table.setCellWidget(row, col, lab)
         elif item is not None:
             q_item = QTableWidgetItem(item)
