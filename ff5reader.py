@@ -303,13 +303,15 @@ def make_string_img_large(bytestring, macros=None, jp=False):
     xmax = x if x > xmax else xmax
     return string, QPixmap.fromImage(img.copy(0, 0, xmax, y+16))
 
-def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None, indirect=False, large=False, macros_en=None, macros_jp=None):
+def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None,
+                         indirect=False, large=False, macros_en=None, macros_jp=None):
     start_jp = start if start_jp is None else start_jp
     len_jp = length if len_jp is None else len_jp
     start_str = start if start_str is None else start_str
     start_jp_str = start_str if start_jp_str is None else start_jp_str
     stringlist = []
     id_digits = hex_length(num-1)
+
     if indirect:
         for id in range(num):
             en = start + (id*length)
@@ -324,30 +326,28 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
             if jp_start >= 0xC00000:  # SNES memory space has the ROM starting at 0xC00000 in HiROM mode.
                 jp_start -= 0xC00000
                 jp_end -= 0xC00000
-            if (en_end == start_str) or (jp_end == start_jp_str) or (en_end > len(ROM_en)) or (jp_end > len(ROM_jp)):
+            if (en_end == start_str) or (jp_end == start_jp_str):
                 break
-            try:
-                if en_end > en_start:
-                    if large:
-                        str_en, img_en = make_string_img_large(ROM_en[en_start:en_end], macros_en)
-                    else:
-                        str_en, img_en = make_string_img_small(ROM_en[en_start:en_end])
+            try:  # When dealing with pointer redirection we might end up passing empty strings
+                if large:
+                    str_en, img_en = make_string_img_large(ROM_en[en_start:en_end], macros_en)
                 else:
-                    str_en = ''
-                    img_en = None
-
-                if jp_end > jp_start:
-                    if large:
-                        str_jp, img_jp = make_string_img_large(ROM_jp[jp_start:jp_end], macros_jp, jp=True)
-                    else:
-                        str_jp, img_jp = make_string_img_small(ROM_jp[jp_start:jp_end], jp=True)
-                else:
-                    str_jp = ''
-                    img_jp = None
+                    str_en, img_en = make_string_img_small(ROM_en[en_start:en_end])
             except ValueError:
-                print("ID: {} \tRef.0x{:06X} 0x{:06X} \tRange EN: 0x{:06X}-0x{:06X} \tRange JP: 0x{:06X}-0x{:06X}".format(id, en, jp, en_start, en_end, jp_start, jp_end))
-                raise
-            stringlist.append(["0x{:06X}".format(en), "0x{:0{}X}".format(id, id_digits), str_en, img_en, str_jp, img_jp, "0x{:06X}".format(jp_start)])
+                str_en = ''
+                img_en = None
+            try:
+                if large:
+                    str_jp, img_jp = make_string_img_large(ROM_jp[jp_start:jp_end], macros_jp, jp=True)
+                else:
+                    str_jp, img_jp = make_string_img_small(ROM_jp[jp_start:jp_end], jp=True)
+            except ValueError:
+                str_jp = ''
+                img_jp = None
+            stringlist.append([
+                "0x{:06X}".format(en), "0x{:0{}X}".format(id, id_digits),
+                str_en, img_en, str_jp, img_jp, "0x{:06X}".format(jp_start)
+                ])
     else:
         for id in range(num):
             j1 = start + (id*length)
