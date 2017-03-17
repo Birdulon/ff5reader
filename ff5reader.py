@@ -6,6 +6,7 @@ No license for now
 import sys
 import os
 import struct
+from itertools import chain
 from array import array
 from snestile import create_tile, create_tritile
 import const
@@ -13,6 +14,8 @@ import time
 
 pyqt_version = 0
 skip_pyqt5 = "PYQT4" in os.environ
+filename_en = "Final Fantasy V (Japan) [En by RPGe v1.1].sfc"
+filename_jp = "Final Fantasy V (Japan).sfc"
 
 if not skip_pyqt5:
     try:
@@ -80,37 +83,19 @@ def divceil(numerator, denominator):
 def hex_length(i):
     return divceil(i.bit_length(), 4)
 
-filename = "Final Fantasy V (Japan) [En by RPGe v1.1].sfc"
-with open(filename, 'rb') as file1:
-    ROM = file1.read()
-print(len(ROM), filename)
-filename2 = "Final Fantasy V (Japan).sfc"
-with open(filename2, 'rb') as file2:
-    ROM2 = file2.read()
-print(len(ROM2), filename2)
+with open(filename_en, 'rb') as file1:
+    ROM_en = file1.read()
+print(len(ROM_en), filename_en)
+with open(filename_jp, 'rb') as file2:
+    ROM_jp = file2.read()
+print(len(ROM_jp), filename_jp)
 
 col_palette = [QColor(0, 0, 0), QColor(0, 0, 128, 0),
                QColor(128, 128, 128), QColor(255, 255, 255)]
 bg_color = QColor(0, 0, 128)
 
-glyph_sprites = []
-glyph_sprites_dialogue = []
-glyph_sprites_jp = []
-glyph_sprites_large = []
-glyph_sprites_kanji = []
-
 stringlist_headers = ["Address", "ID", "Name"]
 imglist_headers = stringlist_headers + ["Img", "Name JP", "Img JP"]
-
-npc_layer_count = 0x200
-npc_layer_structure = [("Dialogue/trigger ID", 1, None),
-                       ("0x01", 1, None),
-                       ("Sprite ID", 1, None),
-                       ("X", 1, None),
-                       ("Y", 1, None),
-                       ("Move Pattern", 1, None),
-                       ("Palette", 1, None)]
-npc_layer_headers = ["Address", "Layer"] + [x[0] for x in npc_layer_structure]
 
 
 class FF5Reader(QMainWindow):
@@ -119,18 +104,21 @@ class FF5Reader(QMainWindow):
     """
     def __init__(self):
         QMainWindow.__init__(self, None)
-        generate_glyphs(ROM, glyph_sprites, 0x11F000)
-        generate_glyphs_large(ROM, glyph_sprites_dialogue, 0x03E800)
-        generate_glyphs(ROM2, glyph_sprites_jp, 0x11F000)
-        generate_glyphs_large(ROM2, glyph_sprites_large, 0x03E800)
-        generate_glyphs_large(ROM2, glyph_sprites_kanji, 0x1BD000, 0x1AA)
+        global glyph_sprites_en_large, glyph_sprites_en_small, glyph_sprites_jp_small, glyph_sprites_jp_large, glyph_sprites_kanji, glyph_sprites_jp_dialogue
+        glyph_sprites_en_small = generate_glyphs(ROM_en, 0x11F000)
+        glyph_sprites_en_large = generate_glyphs_large(ROM_en, 0x03E800)
+        glyph_sprites_jp_small = generate_glyphs(ROM_jp, 0x11F000)
+        glyph_sprites_jp_large = generate_glyphs_large(ROM_jp, 0x03E800)
+        glyph_sprites_kanji = generate_glyphs_large(ROM_jp, 0x1BD000, 0x1AA)  # Kanji are unchanged in EN version
+        #glyph_sprites_jp_dialogue = {i:v for i, v in chain(enumerate(glyph_sprites_jp_large[0x20:0xEB]), enumerate(glyph_sprites_kanji, 0x1E00))}
         global zone_names
         zone_names = make_string_img_list(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200, indirect=True, large=True)
         items = make_string_img_list(0x111380, 9, 256)
         magics = make_string_img_list(0x111C80, 6, 87)
         more_magics = make_string_img_list(0x111E8A, 9, 73)
         enemy_names = make_string_img_list(0x200050, 10, 0x180, 0x105C00, 8)
-        zone_count = 0x200
+        dialogue = make_string_img_list(0x2013F0, 3, 0x900, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros_en=const.Dialogue_Macros_EN, macros_jp=const.Dialogue_Macros_JP)
+
         zone_structure = [("NPC Layer", 2, None),
                         ("Name", 1, zone_names),
                         ("ShadowFlags", 1, None),
@@ -159,13 +147,13 @@ class FF5Reader(QMainWindow):
         zone_headers = ["Address"] + [z[0] for z in zone_structure]
 
         zone_data = []
-        for i in range(zone_count):
+        for i in range(const.zone_count):
             zone_data.append([])
             offset = 0x0E9C00 + (i*0x1A)
             zone_data[-1].append("0x{:06X}".format(offset))
             j = 0
             for z in zone_structure:
-                val = int.from_bytes(ROM[offset+j:offset+j+z[1]],'little')
+                val = int.from_bytes(ROM_en[offset+j:offset+j+z[1]],'little')
                 if z[2] and val < len(z[2]):
                     zone_data[-1].append(z[2][val][2])
                 else:
@@ -173,37 +161,35 @@ class FF5Reader(QMainWindow):
                 j += z[1]
 
         npc_layers = []
-        for layer in range(npc_layer_count):
+        for layer in range(const.npc_layer_count):
             offset = 0x0E59C0
             i = offset + (layer*2)
-            start = int.from_bytes(ROM[i:i+2],'little') + offset
-            next = int.from_bytes(ROM[i+2:i+4],'little') + offset
+            start = int.from_bytes(ROM_en[i:i+2],'little') + offset
+            next = int.from_bytes(ROM_en[i+2:i+4],'little') + offset
             npcs = (next - start) // 7
             for npc in range(npcs):
                 address = start + (npc*7)
                 npc_layers.append(["0x{0:06X}".format(address), "0x{0:03X}".format(layer)])
                 j = 0
-                for z in npc_layer_structure:
-                    val = int.from_bytes(ROM[start+j:start+j+z[1]],'little')
+                for z in const.npc_layer_structure:
+                    val = int.from_bytes(ROM_en[start+j:start+j+z[1]],'little')
                     if z[2] and val < len(z[2]):
                         npc_layers[-1].append(z[2][val])
                     else:
                         npc_layers[-1].append("0x{:0{}X}".format(val, z[1]*2))
             j += z[1]
 
-        dialogue = make_string_img_list(0x2013F0, 3, 0x900, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros=True)  # start_str=0x210000
-
         self.tabwidget = QTabWidget()
         self.enemy_sprites = QFrame()
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites, 4), "Glyphs (EN)")
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_dialogue, 2), "Glyphs (Dialogue EN)")
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_jp, 4), "Glyphs (JP)")
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_large, 2), "Glyphs (Large JP)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_en_small, 4), "Glyphs (EN)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_en_large, 2), "Glyphs (Dialogue EN)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_jp_small, 4), "Glyphs (JP)")
+        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_jp_large, 2), "Glyphs (Large JP)")
         self.tabwidget.addTab(make_pixmap_table(glyph_sprites_kanji, 2), "Glyphs (Kanji)")
         self.tabwidget.addTab(self.enemy_sprites, "Enemy Sprites")
         self.tabwidget.addTab(make_table(zone_headers, zone_data, True), "Zones")
         self.tabwidget.addTab(make_table(imglist_headers, zone_names, True, scale=1), "Zone Names")
-        self.tabwidget.addTab(make_table(npc_layer_headers, npc_layers, True), "NPC Layers")
+        self.tabwidget.addTab(make_table(const.npc_layer_headers, npc_layers, True), "NPC Layers")
         self.tabwidget.addTab(make_table(imglist_headers, items, row_labels=False), "Items")
         self.tabwidget.addTab(make_table(imglist_headers, magics, row_labels=False), "Magics")
         self.tabwidget.addTab(make_table(imglist_headers, more_magics, row_labels=False), "More Magics")
@@ -218,17 +204,21 @@ class FF5Reader(QMainWindow):
         self.show()
 
 
-def generate_glyphs(rom, spritelist, offset, num=0x100, palette=col_palette):
+def generate_glyphs(rom, offset, num=0x100, palette=col_palette):
+    spritelist = []
     for i in range(num):
         j = offset + (i*16)
         spritelist.append(create_tile(rom[j:j+16], palette))
+    return spritelist
 
-def generate_glyphs_large(rom, spritelist, offset, num=0x100):
+def generate_glyphs_large(rom, offset, num=0x100):
+    spritelist = []
     for i in range(num):
         j = offset + (i*24)
         spritelist.append(create_tritile(rom[j:j+24]))
+    return spritelist
 
-def make_string_img(bytestring, jp=False):
+def make_string_img_small(bytestring, jp=False):
     if len(bytestring) < 1:
         raise ValueError('Empty bytestring was passed')
     string = ""
@@ -240,24 +230,25 @@ def make_string_img(bytestring, jp=False):
             string = string + const.Glyphs_JP2[j]
             if 0x20 <= j < 0x52:
                 if j > 0x48:
-                    painter.drawPixmap(x*8, 2, glyph_sprites_jp[j+0x17])
-                    painter.drawPixmap(x*8+1,-5, glyph_sprites_jp[0x52])
+                    painter.drawPixmap(x*8, 2, glyph_sprites_jp_small[j+0x17])
+                    painter.drawPixmap(x*8+1,-5, glyph_sprites_jp_small[0x52])
                 else:
-                    painter.drawPixmap(x*8, 2, glyph_sprites_jp[j+0x40])
-                    painter.drawPixmap(x*8+1,-6, glyph_sprites_jp[0x51])
+                    painter.drawPixmap(x*8, 2, glyph_sprites_jp_small[j+0x40])
+                    painter.drawPixmap(x*8+1,-6, glyph_sprites_jp_small[0x51])
             else:
-                painter.drawPixmap(x*8, 2, glyph_sprites_jp[j])
+                painter.drawPixmap(x*8, 2, glyph_sprites_jp_small[j])
     else:
         for x, j in enumerate(bytestring):
             string = string + const.Glyphs[j]
-            painter.drawPixmap(x*8, 1, glyph_sprites[j])
+            painter.drawPixmap(x*8, 1, glyph_sprites_en_small[j])
     del painter
     return string, QPixmap.fromImage(img)
 
-def dialogue_preprocessor(bytestring, macros=False):
+def string_preprocess(bytestring, macros=None):
     '''
     This deals with pesky control codes that lump in the following byte.
     Additionally, it can expand the macros used in JP dialogue.
+    Only really needed for stuff that uses the large set of glyphs.
     '''
     out = []
     bytes = iter(bytestring)
@@ -265,24 +256,25 @@ def dialogue_preprocessor(bytestring, macros=False):
         if b in const.DoubleChars:
             b2 = next(bytes)
             out.append((b<<8) + b2)
-        elif macros and b in const.Dialogue_Macros:
-                out.extend(const.Dialogue_Macros[b])
+        elif macros and b in macros:
+                out.extend(macros[b])
         else:
             out.append(b)
     return out
 
-def make_string_img_multiline(bytestring):
+def make_string_img_large(bytestring, jp=False):
     '''
-    This is basically make_string_img_large() but for english dialogue.
-    English characters have varying widths, so instead of x being an index it's a pixel value. Magic, eh?
+    This is how we decipher dialogue data, which has multiple lines among other things.
+    English characters have varying widths. In the japanese version, everything is fullwidth (16px)
+    Kanji aren't used in English dialogue but the cost is likely the same in checking either way.
     '''
     if len(bytestring) < 1:
         raise ValueError('Empty bytestring was passed')
 
     string = ""
-    max_width = 32*8  # This seems to check out, but the EN dialogue has linebreaks virtually everywhere anyway
-    rows = 64  # I've seen up to 58 rows. Stay safe.
-    img = QImage(max_width, rows*16, QImage.Format_RGB16)
+    max_width = 256  # This seems to check out, but the EN dialogue has linebreaks virtually everywhere anyway
+    max_height = 512  # I've seen up to 58 rows in EN, 36 in JP. Stay safe.
+    img = QImage(max_width, max_height, QImage.Format_RGB16)
     img.fill(bg_color)
     painter = QtGui.QPainter(img)
 
@@ -292,66 +284,32 @@ def make_string_img_multiline(bytestring):
             string += '[wr]\n'
             xmax = max_width  # Can't go higher than this anyway
             x = 0
-            y += 1
+            y += 16
         if j == 0x01:  # Line break
             string += '[br]\n'
             xmax = x if x > xmax else xmax
             x = 0
-            y += 1
-            continue
-        elif j < 0x13 or j > 0xFF:  # Everything remaining outside this is a control char
-            string += '[0x{:02X}]'.format(j)
-            continue
-        else:
-            string += const.Glyphs[j]
-            painter.drawPixmap(x, (y*16)+4, glyph_sprites_dialogue[j])
-            x += const.Dialogue_Width[j]
-    del painter
-    xmax = x if x > xmax else xmax
-    return string, QPixmap.fromImage(img.copy(0, 0, xmax, (y+1)*16))
-
-def make_string_img_large(bytestring):
-    '''
-    This is how we decipher dialogue data, which has multiple lines among other things
-    '''
-    if len(bytestring) < 1:
-        raise ValueError('Empty bytestring was passed')
-
-    string = ""
-    cols = 16  # This is the maximum dialogue glyphs per row in JP
-    rows = 48  # Maximum observed lines in JP is 36. Stay safe.
-    img = QImage(cols*16, rows*16, QImage.Format_RGB16)
-    img.fill(bg_color)
-    painter = QtGui.QPainter(img)
-
-    x = xmax = y = 0
-    for j in bytestring:
-        if x >= cols:  # Wrap on long line
-            string += '[wr]\n'
-            xmax = cols  # Can't go higher than this anyway
-            x = 0
-            y += 1
-        if j == 0x01:  # Line break
-            string += '[br]\n'
-            xmax = x if x > xmax else xmax
-            x = 0
-            y += 1
-            continue
+            y += 16
         elif 0x1E00 <= j < 0x1FAA:  # Kanji live in this range
             string += const.Glyphs_Kanji[j-0x1E00]
-            painter.drawPixmap(x*16, (y*16)+2, glyph_sprites_kanji[j-0x1E00])
+            painter.drawPixmap(x, y+2, glyph_sprites_kanji[j-0x1E00])
+            x += 16
         elif j < 0x13 or j > 0xFF:  # Everything remaining outside this is a control char
             string += '[0x{:02X}]'.format(j)
-            continue
         else:
-            string += const.Glyphs_JP_large[j]
-            painter.drawPixmap(x*16, (y*16)+2, glyph_sprites_large[j])
-        x += 1
+            if jp:
+                string += const.Glyphs_JP_large[j]
+                painter.drawPixmap(x, y+2, glyph_sprites_jp_large[j])
+                x += 16
+            else:
+                string += const.Glyphs[j]
+                painter.drawPixmap(x, y+4, glyph_sprites_en_large[j])
+                x += const.Dialogue_Width[j]
     del painter
     xmax = x if x > xmax else xmax
-    return string, QPixmap.fromImage(img.copy(0, 0, xmax*16, (y+1)*16))
+    return string, QPixmap.fromImage(img.copy(0, 0, xmax, y+16))
 
-def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None, indirect=False, large=False, macros=False):
+def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None, indirect=False, large=False, macros_en=None, macros_jp=None):
     start_jp = start if start_jp is None else start_jp
     len_jp = length if len_jp is None else len_jp
     start_str = start if start_str is None else start_str
@@ -362,48 +320,52 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
         for id in range(num):
             en = start + (id*length)
             jp = start_jp + (id*len_jp)
-            en_start = int.from_bytes(ROM[en:en+length],'little') + start_str
-            en_end = int.from_bytes(ROM[en+length:en+(length*2)],'little') + start_str
-            if en_start >= 0xC00000:
+            en_start = int.from_bytes(ROM_en[en:en+length],'little') + start_str
+            en_end = int.from_bytes(ROM_en[en+length:en+(length*2)],'little') + start_str
+            if en_start >= 0xC00000:  # SNES memory space has the ROM starting at 0xC00000 in HiROM mode.
                 en_start -= 0xC00000
                 en_end -= 0xC00000
-            jp_start = int.from_bytes(ROM2[jp:jp+len_jp],'little') + start_jp_str
-            jp_end = int.from_bytes(ROM2[jp+len_jp:jp+(len_jp*2)],'little') + start_jp_str
-            if (en_end == start_str) or (jp_end == start_jp_str) or (en_end > len(ROM)) or (jp_end > len(ROM2)):
+            jp_start = int.from_bytes(ROM_jp[jp:jp+len_jp],'little') + start_jp_str
+            jp_end = int.from_bytes(ROM_jp[jp+len_jp:jp+(len_jp*2)],'little') + start_jp_str
+            if jp_start >= 0xC00000:  # SNES memory space has the ROM starting at 0xC00000 in HiROM mode.
+                jp_start -= 0xC00000
+                jp_end -= 0xC00000
+            if (en_end == start_str) or (jp_end == start_jp_str) or (en_end > len(ROM_en)) or (jp_end > len(ROM_jp)):
                 break
             try:
                 if en_end > en_start:
                     if large:
-                        string, img = make_string_img_multiline(dialogue_preprocessor(ROM[en_start:en_end]))
+                        str_en, img_en = make_string_img_large(string_preprocess(ROM_en[en_start:en_end], macros_en))
                     else:
-                        string, img = make_string_img(ROM[en_start:en_end])
+                        str_en, img_en = make_string_img_small(ROM_en[en_start:en_end])
                 else:
-                    string = ''
-                    img = None
+                    str_en = ''
+                    img_en = None
 
                 if jp_end > jp_start:
-                    bytestring = dialogue_preprocessor(ROM2[jp_start:jp_end], macros)
+                    bytestring = string_preprocess(ROM_jp[jp_start:jp_end], macros_jp)
                     if large:
-                        string_JP, img_JP = make_string_img_large(bytestring)
+                        str_jp, img_jp = make_string_img_large(bytestring, jp=True)
                     else:
-                        string_JP, img_JP = make_string_img(bytestring, jp=True)
+                        str_jp, img_jp = make_string_img_small(bytestring, jp=True)
                 else:
-                    string_JP = ''
-                    img_JP = None
+                    str_jp = ''
+                    img_jp = None
             except ValueError:
                 print("ID: {} \tRef.0x{:06X} 0x{:06X} \tRange EN: 0x{:06X}-0x{:06X} \tRange JP: 0x{:06X}-0x{:06X}".format(id, en, jp, en_start, en_end, jp_start, jp_end))
                 raise
-            stringlist.append(["0x{:06X}".format(en), "0x{:0{}X}".format(id, id_digits), string, img, string_JP, img_JP, "0x{:06X}".format(jp_start)])
+            stringlist.append(["0x{:06X}".format(en), "0x{:0{}X}".format(id, id_digits), str_en, img_en, str_jp, img_jp, "0x{:06X}".format(jp_start)])
     else:
         for id in range(num):
             j1 = start + (id*length)
             j2 = start_jp + (id*len_jp)
-            string, img = make_string_img(ROM[j1:j1+length])
             if large:
-                string_JP, img_JP = make_string_img_large(ROM2[j2:j2+len_jp])
+                str_en, img_en = make_string_img_large(string_preprocess(ROM_en[j1:j1+length], macros_en))
+                str_jp, img_jp = make_string_img_large(string_preprocess(ROM_jp[j2:j2+len_jp], macros_jp), jp=True)
             else:
-                string_JP, img_JP = make_string_img(ROM2[j2:j2+len_jp], jp=True)
-            stringlist.append(["0x{:06X}".format(j1), "0x{:0{}X}".format(id, id_digits), string, img, string_JP, img_JP])
+                str_en, img_en = make_string_img_small(ROM_en[j1:j1+length])
+                str_jp, img_jp = make_string_img_small(ROM_jp[j2:j2+len_jp], jp=True)
+            stringlist.append(["0x{:06X}".format(j1), "0x{:0{}X}".format(id, id_digits), str_en, img_en, str_jp, img_jp])
     return stringlist
 
 def make_table(headers, items, sortable=False, row_labels=True, scale=2):

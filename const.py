@@ -54,7 +54,7 @@ Glyphs_Kanji1 = (  # TODO: finish this
 
     '　','　','　','　',    '　','　','古','図',    '　','　','　','　',    '　','　','　','　',  # 0x080
     '　','　','　','　',    '　','下','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x090
-    '　','　','　','　',    '　','　','　','舘',    '　','　','　','　',    '　','　','　','　',  # 0x0A0
+    '願','　','　','　',    '　','　','　','舘',    '　','　','　','　',    '　','　','　','　',  # 0x0A0
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','運','河','　',  # 0x0B0
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','少','　','　',  # 0x0C0
     '　','　','　','　',    '　','　','　','代',    '　','　','　','　',    '　','　','　','　',  # 0x0D0
@@ -73,9 +73,13 @@ Glyphs_Kanji1 = (  # TODO: finish this
     '　','　','　','　',    '　','　','　','　',    '　','刀','　','　',    '　','　','　','　',  # 0x180
     '　','　','　','　',    '　','　','　','　',    '　','　','　','　',    '　','　','　','　',  # 0x190
     '　','　','　','　',    '　','　','　','　',    '　','　')                                  # 0x1A0
-Glyphs_Kanji = [g if g!='　' else '${:03X}'.format(i) for (i,g) in enumerate(Glyphs_Kanji1)]
+Glyphs_Kanji = [g if g!='　' else '${:03X}'.format(i) for (i,g) in enumerate(Glyphs_Kanji1)]  # This is only until they are fully transcribed
 
-Dialogue_Macros = {
+Dialogue_Macros_EN = {
+    0x02: [0x61, 0x7A, 0x8B, 0x8D, 0x93],  # expands to Bartz (or whatever his name is)
+    }
+
+Dialogue_Macros_JP = {
     # Is 0x00 a wait for input marker?
     # 0x01 is linebreak
     0x02: [0x20, 0xBC, 0x82], # 0x02 expands to Bartz's name バッツ. Used for his dialogue in EN, only used for other chars in JP.
@@ -156,7 +160,7 @@ Dialogue_Width[0x50:0xB1] = [a+1 for a in [
     5, 2, 6, 6,     5, 6, 6, 6,     6, 6, 6, 6,     6, 8, 8, 8,  # 0x50
     6, 6, 5, 6,     5, 5, 6, 6,     2, 6, 7, 5,     10,7, 6, 6,  # 0x60
     6, 6, 6, 6,     6, 6, 10,6,     6, 6, 6, 6,     5, 6, 6, 5,  # 0x70
-    6, 6, 2, 5,     6, 2, 10,6,     6, 6, 6, 6,     5, 4, 6, 6,  # 0x80
+    6, 6, 2, 5,     6, 2, 10,6,     6, 6, 6, 5,     5, 4, 6, 6,  # 0x80
     10,6, 6, 6,     5, 7, 6, 5,     5, 2, 5, 2,     2, 2, 3, 3,  # 0x90
     5, 2, 6, 2,     7, 8, 0, 0,     6, 9, 2, 5,     8, 7, 7, 8,  # 0xA0
     9
@@ -180,4 +184,21 @@ BGM_Tracks = (
     "Piano Lesson 4", "Piano Lesson 5", "Piano Lesson 6", "Piano Lesson 7",
     "Piano Lesson 8", "Musica Machina", "Meteor falling?", "The Land Unknown",
     "The Decisive Battle", "The Silent Beyond", "Dear Friends", "Final Fantasy",
-    "A New Origin", "Chirping sound")
+    "A New Origin", "Chirping sound"
+    )
+
+
+
+npc_layer_count = 0x200
+npc_layer_structure = [
+    ("Dialogue/trigger ID", 1, None),
+    ("0x01", 1, None),
+    ("Sprite ID", 1, None),
+    ("X", 1, None),
+    ("Y", 1, None),
+    ("Move Pattern", 1, None),
+    ("Palette", 1, None)
+    ]
+npc_layer_headers = ["Address", "Layer"] + [x[0] for x in npc_layer_structure]
+
+zone_count = 0x200
