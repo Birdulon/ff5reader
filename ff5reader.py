@@ -244,34 +244,28 @@ def make_string_img_small(bytestring, jp=False):
     del painter
     return string, QPixmap.fromImage(img)
 
-def string_preprocess(bytestring, macros=None):
+def make_string_img_large(bytestring, macros=None, jp=False):
     '''
-    This deals with pesky control codes that lump in the following byte.
-    Additionally, it can expand the macros used in JP dialogue.
-    Only really needed for stuff that uses the large set of glyphs.
-    '''
-    out = []
-    bytes = iter(bytestring)
-    for b in bytes:
-        if b in const.DoubleChars:
-            b2 = next(bytes)
-            out.append((b<<8) + b2)
-        elif macros and b in macros:
-                out.extend(macros[b])
-        else:
-            out.append(b)
-    return out
-
-def make_string_img_large(bytestring, jp=False):
-    '''
-    This is how we decipher dialogue data, which has multiple lines among other things.
+    This is how we decipher dialogue data, which has multiple lines, macro expansions and kanji.
     English characters have varying widths. In the japanese version, everything is fullwidth (16px)
     Kanji aren't used in English dialogue but the cost is likely the same in checking either way.
     '''
     if len(bytestring) < 1:
         raise ValueError('Empty bytestring was passed')
 
+    newstring = []
+    bytes = iter(bytestring)
+    for b in bytes:
+        if b in const.DoubleChars:
+            b2 = next(bytes)
+            newstring.append((b<<8) + b2)
+        elif macros and b in macros:
+                newstring.extend(macros[b])
+        else:
+            newstring.append(b)
+
     string = ""
+    # Because the length of the input has little bearing on the size of the image thanks to linebreaks and macros, we overprovision then clip away.
     max_width = 256  # This seems to check out, but the EN dialogue has linebreaks virtually everywhere anyway
     max_height = 512  # I've seen up to 58 rows in EN, 36 in JP. Stay safe.
     img = QImage(max_width, max_height, QImage.Format_RGB16)
@@ -279,7 +273,7 @@ def make_string_img_large(bytestring, jp=False):
     painter = QtGui.QPainter(img)
 
     x = xmax = y = 0
-    for j in bytestring:
+    for j in newstring:
         if x >= max_width:  # Wrap on long line
             string += '[wr]\n'
             xmax = max_width  # Can't go higher than this anyway
@@ -335,7 +329,7 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
             try:
                 if en_end > en_start:
                     if large:
-                        str_en, img_en = make_string_img_large(string_preprocess(ROM_en[en_start:en_end], macros_en))
+                        str_en, img_en = make_string_img_large(ROM_en[en_start:en_end], macros_en)
                     else:
                         str_en, img_en = make_string_img_small(ROM_en[en_start:en_end])
                 else:
@@ -343,11 +337,10 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
                     img_en = None
 
                 if jp_end > jp_start:
-                    bytestring = string_preprocess(ROM_jp[jp_start:jp_end], macros_jp)
                     if large:
-                        str_jp, img_jp = make_string_img_large(bytestring, jp=True)
+                        str_jp, img_jp = make_string_img_large(ROM_jp[jp_start:jp_end], macros_jp, jp=True)
                     else:
-                        str_jp, img_jp = make_string_img_small(bytestring, jp=True)
+                        str_jp, img_jp = make_string_img_small(ROM_jp[jp_start:jp_end], jp=True)
                 else:
                     str_jp = ''
                     img_jp = None
@@ -360,8 +353,8 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
             j1 = start + (id*length)
             j2 = start_jp + (id*len_jp)
             if large:
-                str_en, img_en = make_string_img_large(string_preprocess(ROM_en[j1:j1+length], macros_en))
-                str_jp, img_jp = make_string_img_large(string_preprocess(ROM_jp[j2:j2+len_jp], macros_jp), jp=True)
+                str_en, img_en = make_string_img_large(ROM_en[j1:j1+length], macros_en)
+                str_jp, img_jp = make_string_img_large(ROM_jp[j2:j2+len_jp], macros_jp, jp=True)
             else:
                 str_en, img_en = make_string_img_small(ROM_en[j1:j1+length])
                 str_jp, img_jp = make_string_img_small(ROM_jp[j2:j2+len_jp], jp=True)
