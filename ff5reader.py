@@ -120,7 +120,7 @@ class FF5Reader(QMainWindow):
         dialogue = make_string_img_list(0x2013F0, 3, 0x900, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros_en=const.Dialogue_Macros_EN, macros_jp=const.Dialogue_Macros_JP)
 
         zone_structure = [("NPC Layer", 2, None),
-                        ("Name", 1, zone_names),
+                        ("Name", 1, [z[2] for z in zone_names]),
                         ("ShadowFlags", 1, None),
                         ("0x04", 1, None),
                         ("0x05",           1, None),
@@ -155,10 +155,19 @@ class FF5Reader(QMainWindow):
             for z in zone_structure:
                 val = int.from_bytes(ROM_en[offset+j:offset+j+z[1]],'little')
                 if z[2] and val < len(z[2]):
-                    zone_data[-1].append(z[2][val][2])
+                    zone_data[-1].append(z[2][val])
                 else:
                     zone_data[-1].append("0x{:0{}X}".format(val, z[1]*2))
                 j += z[1]
+
+        tileset_headers = ("ID", "Offset", "Pointer", "Expected Length")
+        tileset_data = []
+        for i in range(0x1C):
+            offset = 0x0F0000 + (i*2)
+            pointer = 0x0F0000 + int.from_bytes(ROM_en[offset:offset+2],'little')
+            length = int.from_bytes(ROM_en[offset+2:offset+4],'little') - int.from_bytes(ROM_en[offset:offset+2],'little')
+            tileset_data.append(('0x{:02X}'.format(i), '0x{:06X}'.format(offset),
+                                 '0x{:06X}'.format(pointer), '0x{:04X}'.format(length)))
 
         npc_layers = []
         for layer in range(const.npc_layer_count):
@@ -189,6 +198,7 @@ class FF5Reader(QMainWindow):
         self.tabwidget.addTab(self.enemy_sprites, "Enemy Sprites")
         self.tabwidget.addTab(make_table(zone_headers, zone_data, True), "Zones")
         self.tabwidget.addTab(make_table(imglist_headers, zone_names, True, scale=1), "Zone Names")
+        self.tabwidget.addTab(make_table(tileset_headers, tileset_data, True), "Tilesets")
         self.tabwidget.addTab(make_table(const.npc_layer_headers, npc_layers, True), "NPC Layers")
         self.tabwidget.addTab(make_table(imglist_headers, items, row_labels=False), "Items")
         self.tabwidget.addTab(make_table(imglist_headers, magics, row_labels=False), "Magics")
