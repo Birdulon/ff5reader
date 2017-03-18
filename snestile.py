@@ -3,6 +3,8 @@ No license for now
 '''
 import os
 from array import array
+from struct import unpack
+import const
 
 pyqt_version = 0
 skip_pyqt5 = "PYQT4" in os.environ
@@ -40,7 +42,7 @@ def create_tile(bytes, palette):
         for i, (j, x) in enumerate([(j,x) for j in range(8) for x in reversed(range(8))]):
             tile[i] = (bytes[j] >> x & 1)
     else:
-        img.setColorTable([c.rgba() for c in palette])
+        img.setColorTable(palette)
         for i, (j, x) in enumerate([(j,x) for j in range(0, 16, 2) for x in reversed(range(8))]):
             tile[i] = (bytes[j] >> x & 1) | ((bytes[j+1] >> x & 1) << 1)
         if planes == 3:
@@ -74,7 +76,7 @@ def create_tile_old(bytes, palette):
             tile[t_ptr] = (bytes[j] >> x & 1)
             t_ptr += 1
     else:
-        img.setColorTable([c.rgba() for c in palette])
+        img.setColorTable(palette)
         t_ptr = 0
         for j, x in [(j,x) for j in range(0, 16, 2) for x in reversed(range(8))]:
             tile[t_ptr] = (bytes[j] >> x & 1) | ((bytes[j+1] >> x & 1) << 1)
@@ -101,7 +103,7 @@ def create_tritile(bytes):
     img = QImage(16, 12, QImage.Format_Indexed8)
     imgbits = img.bits()
     imgbits.setsize(img.byteCount())
-    img.setColorTable([0xFF000080, 0xFFFFFFFF])
+    img.setColorTable(const.dialogue_palette)
     tile = array('B', range(192))
     for p, row, b in [(p,j,b) for p in range(2) for j in range(12) for b in reversed(range(8))]:
         tile[(7-b) + (row*16) + (p*8)] = (bytes[row + (p*12)] >> b & 1)
@@ -122,3 +124,32 @@ def create_quadtile(bytes, ltr=False):
         painter.drawPixmap(8, 0, create_tile(bytes[16:24]))
     del painter
     return QPixmap.fromImage(img)
+
+def generate_glyphs(rom, offset, num=0x100, palette=const.small_palette):
+    spritelist = []
+    for i in range(num):
+        j = offset + (i*16)
+        spritelist.append(create_tile(rom[j:j+16], palette))
+    return spritelist
+
+def generate_glyphs_large(rom, offset, num=0x100):
+    spritelist = []
+    for i in range(num):
+        j = offset + (i*24)
+        spritelist.append(create_tritile(rom[j:j+24]))
+    return spritelist
+
+def generate_palette(self, offset, length=16):
+    palette = []
+    for i in range(offset, offset+length, 2):
+        # Need to convert BGR555 to RGB555
+        if (i+2) < len(self.ROM):
+            short = unpack('<H', self.ROM[i:i+2])[0]
+            red = short & 0x1F
+            blue = (short >> 10) & 0x1F
+            green5 = short & 0x3E0
+            bits = (red << 10) | green5 | blue
+        else:
+            bits = 0
+        palette.append[bits]
+    return palette

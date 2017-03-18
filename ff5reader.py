@@ -5,10 +5,10 @@ No license for now
 
 import sys
 import os
-import struct
+from struct import unpack
 from itertools import chain
 from array import array
-from snestile import create_tile, create_tritile
+from snestile import generate_glyphs, generate_glyphs_large
 import const
 import time
 
@@ -69,6 +69,8 @@ if pyqt_version == 0:
               "Make sure you installed the PyQt4 package.")
         sys.exit(-1)
 
+bg_color = QColor(0, 0, 128)
+
 monofont = QFont()
 monofont.setStyleHint(QFont.Monospace)
 if not monofont.fixedPitch():
@@ -89,10 +91,6 @@ print(len(ROM_en), filename_en)
 with open(filename_jp, 'rb') as file2:
     ROM_jp = file2.read()
 print(len(ROM_jp), filename_jp)
-
-col_palette = [QColor(0, 0, 0), QColor(0, 0, 128, 0),
-               QColor(128, 128, 128), QColor(255, 255, 255)]
-bg_color = QColor(0, 0, 128)
 
 stringlist_headers = ["Address", "ID", "Name"]
 imglist_headers = stringlist_headers + ["Img", "Name JP", "Img JP"]
@@ -117,6 +115,7 @@ class FF5Reader(QMainWindow):
         magics = make_string_img_list(0x111C80, 6, 87)
         more_magics = make_string_img_list(0x111E8A, 9, 73)
         enemy_names = make_string_img_list(0x200050, 10, 0x180, 0x105C00, 8)
+        job_names = make_string_img_list(0x115600, 8, 22)
         dialogue = make_string_img_list(0x2013F0, 3, 0x900, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros_en=const.Dialogue_Macros_EN, macros_jp=const.Dialogue_Macros_JP)
 
         zone_structure = [("NPC Layer", 2, None),
@@ -189,22 +188,32 @@ class FF5Reader(QMainWindow):
             j += z[1]
 
         self.tabwidget = QTabWidget()
+        strings_tab = QTabWidget()
+        structs_tab = QTabWidget()
+        sprites_tab = QTabWidget()
+        self.tabwidget.addTab(strings_tab, "Strings")
+        self.tabwidget.addTab(structs_tab, "Structs")
+        self.tabwidget.addTab(sprites_tab, "Images")
         self.enemy_sprites = QFrame()
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_en_small, 4), "Glyphs (EN)")
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_en_large, 2), "Glyphs (Dialogue EN)")
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_jp_small, 4), "Glyphs (JP)")
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_jp_large, 2), "Glyphs (Large JP)")
-        self.tabwidget.addTab(make_pixmap_table(glyph_sprites_kanji, 2), "Glyphs (Kanji)")
-        self.tabwidget.addTab(self.enemy_sprites, "Enemy Sprites")
-        self.tabwidget.addTab(make_table(zone_headers, zone_data, True), "Zones")
-        self.tabwidget.addTab(make_table(imglist_headers, zone_names, True, scale=1), "Zone Names")
-        self.tabwidget.addTab(make_table(tileset_headers, tileset_data, True), "Tilesets")
-        self.tabwidget.addTab(make_table(const.npc_layer_headers, npc_layers, True), "NPC Layers")
-        self.tabwidget.addTab(make_table(imglist_headers, items, row_labels=False), "Items")
-        self.tabwidget.addTab(make_table(imglist_headers, magics, row_labels=False), "Magics")
-        self.tabwidget.addTab(make_table(imglist_headers, more_magics, row_labels=False), "More Magics")
-        self.tabwidget.addTab(make_table(imglist_headers, enemy_names, row_labels=False), "Enemy Names")
-        self.tabwidget.addTab(make_table(imglist_headers+['JP address'], dialogue, scale=1), "Dialogue")
+
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_small, 4), "Glyphs (EN)")
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_large, 2), "Glyphs (Dialogue EN)")
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_small, 4), "Glyphs (JP)")
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, 2), "Glyphs (Large JP)")
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, 2), "Glyphs (Kanji)")
+        sprites_tab.addTab(self.enemy_sprites, "Enemy Sprites")
+
+        structs_tab.addTab(make_table(zone_headers, zone_data, True), "Zones")
+        structs_tab.addTab(make_table(tileset_headers, tileset_data, True), "Tilesets")
+        structs_tab.addTab(make_table(const.npc_layer_headers, npc_layers, True), "NPC Layers")
+
+        strings_tab.addTab(make_table(imglist_headers, items, row_labels=False), "Items")
+        strings_tab.addTab(make_table(imglist_headers, magics, row_labels=False), "Magics")
+        strings_tab.addTab(make_table(imglist_headers, more_magics, row_labels=False), "More Magics")
+        strings_tab.addTab(make_table(imglist_headers, enemy_names, row_labels=False), "Enemy Names")
+        strings_tab.addTab(make_table(imglist_headers, job_names, row_labels=False), "Job Names")
+        strings_tab.addTab(make_table(imglist_headers, zone_names, True, scale=1), "Zone Names")
+        strings_tab.addTab(make_table(imglist_headers+['JP address'], dialogue, scale=1), "Dialogue")
 
         layout = QHBoxLayout()
         layout.addWidget(self.tabwidget)
@@ -213,20 +222,6 @@ class FF5Reader(QMainWindow):
         self.setCentralWidget(self.main_widget)
         self.show()
 
-
-def generate_glyphs(rom, offset, num=0x100, palette=col_palette):
-    spritelist = []
-    for i in range(num):
-        j = offset + (i*16)
-        spritelist.append(create_tile(rom[j:j+16], palette))
-    return spritelist
-
-def generate_glyphs_large(rom, offset, num=0x100):
-    spritelist = []
-    for i in range(num):
-        j = offset + (i*24)
-        spritelist.append(create_tritile(rom[j:j+24]))
-    return spritelist
 
 def make_string_img_small(bytestring, jp=False):
     if len(bytestring) < 1:

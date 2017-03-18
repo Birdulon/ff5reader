@@ -1,6 +1,9 @@
 '''
 No license for now
 '''
+small_palette = [0xFF000000, 0x00000080, 0xFF808080, 0xFFFFFFFF]
+dialogue_palette = [0xFF000080, 0xFFFFFFFF]
+
 
 Glyphs = (
     ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',    ' ',' ',' ',' ',      # 0x00
