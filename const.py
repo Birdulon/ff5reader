@@ -3,6 +3,7 @@ No license for now
 '''
 small_palette = [0xFF000000, 0x00000080, 0xFF808080, 0xFFFFFFFF]
 dialogue_palette = [0xFF000080, 0xFFFFFFFF]
+mono_palette = [0xFF000000, 0xFFFFFFFF]
 
 
 Glyphs = (
@@ -202,6 +203,6 @@ npc_layer_structure = [
     ("Move Pattern", 1, None),
     ("Palette", 1, None)
     ]
-npc_layer_headers = ["Address", "Layer"] + [x[0] for x in npc_layer_structure]
+npc_layer_headers = ["Ptr Address", "Layer", "Data Address"] + [x[0] for x in npc_layer_structure]
 
 zone_count = 0x200

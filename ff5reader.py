@@ -148,17 +148,8 @@ class FF5Reader(QMainWindow):
 
         zone_data = []
         for i in range(const.zone_count):
-            zone_data.append([])
             offset = 0x0E9C00 + (i*0x1A)
-            zone_data[-1].append("0x{:06X}".format(offset))
-            j = 0
-            for z in zone_structure:
-                val = int.from_bytes(ROM_en[offset+j:offset+j+z[1]],'little')
-                if z[2] and val < len(z[2]):
-                    zone_data[-1].append(z[2][val])
-                else:
-                    zone_data[-1].append("0x{:0{}X}".format(val, z[1]*2))
-                j += z[1]
+            zone_data.append(parse_struct(ROM_en, offset, zone_structure))
 
         tileset_headers = ("ID", "Offset", "Pointer", "Expected Length")
         tileset_data = []
@@ -170,26 +161,43 @@ class FF5Reader(QMainWindow):
                                  '0x{:06X}'.format(pointer), '0x{:04X}'.format(length)))
 
         npc_layers = []
+        offset = 0x0E59C0
         for layer in range(const.npc_layer_count):
-            offset = 0x0E59C0
             i = offset + (layer*2)
             start = int.from_bytes(ROM_en[i:i+2],'little') + offset
             next = int.from_bytes(ROM_en[i+2:i+4],'little') + offset
             npcs = (next - start) // 7
             for npc in range(npcs):
                 address = start + (npc*7)
-                npc_layers.append(["0x{0:06X}".format(address), "0x{0:03X}".format(layer)])
-                j = 0
-                for z in const.npc_layer_structure:
-                    val = int.from_bytes(ROM_en[start+j:start+j+z[1]],'little')
-                    if z[2] and val < len(z[2]):
-                        npc_layers[-1].append(z[2][val])
-                    else:
-                        npc_layers[-1].append("0x{:0{}X}".format(val, z[1]*2))
-            j += z[1]
+                npc_layers.append(["0x{0:06X}".format(i), "0x{0:03X}".format(layer)] + parse_struct(ROM_en, address, const.npc_layer_structure))
+
+        enemy_tile_layouts = []
+        address = 0x10D004
+        for i in range(0x66):
+            offset = address + (i*8)
+            img = QImage(8, 8, QImage.Format_Mono)
+            img.setColorTable(const.mono_palette)
+            for i in range(8):
+                ptr = img.scanLine(i)
+                ptr.setsize(32)
+                ptr[0:1] = ROM_en[offset+i:offset+i+1]
+            pixmap = QPixmap.fromImage(img)
+            enemy_tile_layouts.append(pixmap.scaled(16, 16))
+
+        enemy_sprite_data = []
+        enemy_sprite_structure = [
+            ("Sprite data offset", 2, None),
+            ("Multiple things",    2, None),
+            ("Tile Layout ID",     1, enemy_tile_layouts)
+            ]
+        enemy_sprite_headers = ["Address"]+[i[0] for i in enemy_sprite_structure]+["EN Name","EN Name"]
+        address = 0x14B180
+        for i in range(0x180):
+            enemy_sprite_data.append(parse_struct(ROM_en, address + (i*5), enemy_sprite_structure) + enemy_names[i][2:4])
 
         self.battle_strips = make_character_battle_sprites(ROM_en)
         status_strips = make_character_status_sprites(ROM_en)
+        enemy_sprites = make_enemy_sprites(ROM_en)
 
         self.tabwidget = QTabWidget()
         strings_tab = QTabWidget()
@@ -198,7 +206,6 @@ class FF5Reader(QMainWindow):
         self.tabwidget.addTab(strings_tab, "Strings")
         self.tabwidget.addTab(structs_tab, "Structs")
         self.tabwidget.addTab(sprites_tab, "Images")
-        self.enemy_sprites = QFrame()
 
         sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_small, scale=4), "Glyphs (EN)")
         sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_large, scale=2), "Glyphs (Dialogue EN)")
@@ -207,11 +214,12 @@ class FF5Reader(QMainWindow):
         sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, scale=2), "Glyphs (Kanji)")
         sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22, scale=2), "Character Battle Sprites")
         sprites_tab.addTab(make_pixmap_table(status_strips, cols=22, scale=2), "Status Sprites")
-        sprites_tab.addTab(self.enemy_sprites, "Enemy Sprites")
+        sprites_tab.addTab(make_pixmap_table(enemy_sprites, scale=1), "Enemy Sprites")
 
         structs_tab.addTab(make_table(zone_headers, zone_data, True), "Zones")
         structs_tab.addTab(make_table(tileset_headers, tileset_data, True), "Tilesets")
         structs_tab.addTab(make_table(const.npc_layer_headers, npc_layers, True), "NPC Layers")
+        structs_tab.addTab(make_table(enemy_sprite_headers, enemy_sprite_data, True), "Enemy Sprites")
 
         strings_tab.addTab(make_table(imglist_headers, items, row_labels=False), "Items")
         strings_tab.addTab(make_table(imglist_headers, magics, row_labels=False), "Magics")
@@ -244,6 +252,48 @@ class Canvas:
     def pixmap(self):
         return QPixmap.fromImage(self.image)
 
+def parse_struct(rom, offset, structure):
+    out = ["0x{:06X}".format(offset)]
+    j = 0
+    for z in structure:
+        val = int.from_bytes(rom[offset+j:offset+j+z[1]],'little')
+        if z[2] and val < len(z[2]):
+            out.append(z[2][val])
+        else:
+            out.append("0x{:0{}X}".format(val, z[1]*2))
+        j += z[1]
+    return out
+
+def make_enemy_sprites(rom):
+    sprites = []
+    for e_id in range(0, 0x180*5, 5):
+        triplane = bool(rom[0x14B180+e_id]&0x80)  # True if 3 planes, False if 4
+        bytes_per_tile = 24 if triplane else 32
+        tile_offset = ((((rom[0x14B180+e_id]&0x7F)<<8)| rom[0x14B181+e_id]) << 3) + 0x150000  # For whatever reason this is big endian
+        pal_offset = ((((rom[0x14B182+e_id]&0x03)<<8)| rom[0x14B183+e_id]) << 4) + 0x0ED000  # For whatever reason this is big endian
+        pal_size = 16 if triplane else 32
+        palette = generate_palette(rom, pal_offset, pal_size)
+        layout_id = rom[0x14B184+e_id]
+        boss_layout = bool(rom[0x14B182+e_id]&0x80)
+        if boss_layout:
+            layout = rom[0x10D334+(layout_id<<5):0x10D334+(layout_id<<5)+32]
+            sprite = Canvas(16, 16)
+            for x, y in [(x,y) for y in range(16) for x in range(16)]:
+                if (int.from_bytes(layout[y*2:y*2+2], 'little') & (0x8000 >> x)):
+                    sprite.draw_pixmap(x, y, create_tile(rom[tile_offset:tile_offset+bytes_per_tile], palette))
+                    tile_offset += bytes_per_tile
+        else:
+            layout = rom[0x10D004+(layout_id<<3):0x10D004+(layout_id<<3)+8]
+            sprite = Canvas(8, 8)
+            for x, y in [(x,y) for y in range(8) for x in range(8)]:
+                if (layout[y] & (0x80 >> x)):
+                    sprite.draw_pixmap(x, y, create_tile(rom[tile_offset:tile_offset+bytes_per_tile], palette))
+                    tile_offset += bytes_per_tile
+
+        # TODO: Shadow stuff
+        sprites.append(sprite.pixmap())
+    return sprites
+
 def make_character_battle_sprites(rom):
     tile_address = 0x120000
     palette_address = 0x14A3C0
@@ -252,15 +302,11 @@ def make_character_battle_sprites(rom):
         palette = generate_palette(rom, palette_address + i)
         # We don't want the background drawn, so we'll make that colour transparent
         palette[0] = 0
-        battle_strip = QImage(16, 192, QImage.Format_ARGB32_Premultiplied)
-        battle_strip.fill(QColor(0,0,0,0))
-        painter = QtGui.QPainter(battle_strip)
-        for j in range(0, 24*8, 8):
-            offset = tile_address+(i*48)+(j*8)
-            painter.drawPixmap(0, j, create_tile(rom[offset:offset+32], palette))
-            painter.drawPixmap(8, j, create_tile(rom[offset+32:offset+64], palette))
-        del painter
-        battle_strips.append(QPixmap.fromImage(battle_strip))
+        battle_strip = Canvas(2, 24)
+        for j in range(48):
+            offset = tile_address+(i*48)+(j*32)
+            battle_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+32], palette))
+        battle_strips.append(battle_strip.pixmap())
     return battle_strips
 
 def make_character_status_sprites(rom):
