@@ -8,7 +8,7 @@ import os
 from struct import unpack
 from itertools import chain
 from array import array
-from snestile import generate_glyphs, generate_glyphs_large
+from snestile import generate_glyphs, generate_glyphs_large, generate_palette, create_tile
 import const
 import time
 
@@ -187,6 +187,8 @@ class FF5Reader(QMainWindow):
                         npc_layers[-1].append("0x{:0{}X}".format(val, z[1]*2))
             j += z[1]
 
+        battle_strips = make_character_battle_sprites(ROM_en)
+
         self.tabwidget = QTabWidget()
         strings_tab = QTabWidget()
         structs_tab = QTabWidget()
@@ -196,11 +198,12 @@ class FF5Reader(QMainWindow):
         self.tabwidget.addTab(sprites_tab, "Images")
         self.enemy_sprites = QFrame()
 
-        sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_small, 4), "Glyphs (EN)")
-        sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_large, 2), "Glyphs (Dialogue EN)")
-        sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_small, 4), "Glyphs (JP)")
-        sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, 2), "Glyphs (Large JP)")
-        sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, 2), "Glyphs (Kanji)")
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_small, scale=4), "Glyphs (EN)")
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_large, scale=2), "Glyphs (Dialogue EN)")
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_small, scale=4), "Glyphs (JP)")
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, scale=2), "Glyphs (Large JP)")
+        sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, scale=2), "Glyphs (Kanji)")
+        sprites_tab.addTab(make_pixmap_table(battle_strips, cols=88), "Character Battle Sprites")
         sprites_tab.addTab(self.enemy_sprites, "Enemy Sprites")
 
         structs_tab.addTab(make_table(zone_headers, zone_data, True), "Zones")
@@ -222,6 +225,22 @@ class FF5Reader(QMainWindow):
         self.setCentralWidget(self.main_widget)
         self.show()
 
+def make_character_battle_sprites(rom):
+    tile_address = 0x120000
+    palette_address = 0x14A3C0
+    battle_strips = []
+    for i in range(88):
+        palette = generate_palette(rom, palette_address + (i*32))
+        battle_strip = QImage(16, 192, QImage.Format_ARGB32_Premultiplied)
+        battle_strip.fill(QColor(0,0,0,0))
+        painter = QtGui.QPainter(battle_strip)
+        for j in range(24):
+            offset = tile_address+(i*48*32)+(j*32)
+            painter.drawPixmap(j*8, 0, create_tile(rom[offset:offset+32], palette))
+            painter.drawPixmap(j*8, 8, create_tile(rom[offset+32:offset+64], palette))
+        del painter
+        battle_strips.append(QPixmap.fromImage(battle_strip))
+    return battle_strips
 
 def make_string_img_small(bytestring, jp=False):
     if len(bytestring) < 1:
@@ -404,8 +423,7 @@ def make_table(headers, items, sortable=False, row_labels=True, scale=2):
         table.sortItems(0)
     return table
 
-def make_pixmap_table(items, scale=4):
-    cols = 16
+def make_pixmap_table(items, cols=16, scale=4):
     rows = divceil(len(items), cols)
     rd = hex_length(rows-1)+1
     table = QTableWidget(rows, cols)
