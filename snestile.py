@@ -139,17 +139,17 @@ def generate_glyphs_large(rom, offset, num=0x100):
         spritelist.append(create_tritile(rom[j:j+24]))
     return spritelist
 
-def generate_palette(self, offset, length=16):
+def generate_palette(rom, offset, length=16):
+    # Need to convert BGR555 to ARGB32
     palette = []
     for i in range(offset, offset+length, 2):
-        # Need to convert BGR555 to RGB555
-        if (i+2) < len(self.ROM):
-            short = unpack('<H', self.ROM[i:i+2])[0]
-            red = short & 0x1F
-            blue = (short >> 10) & 0x1F
-            green5 = short & 0x3E0
-            bits = (red << 10) | green5 | blue
+        if (i+2) < len(rom):
+            short = unpack('<H', rom[i:i+2])[0]
+            b = (short & 0x7C00) >>  7  # b 0XXXXX00 00000000 -> 00000000 00000000 XXXXX000
+            g = (short & 0x03E0) <<  6  # b 000000XX XXX00000 -> 00000000 XXXXX000 00000000
+            r = (short & 0x001F) << 19  # b 00000000 000XXXXX -> XXXXX000 00000000 00000000
+            color = 0xFF000000|r|g|b
         else:
-            bits = 0
-        palette.append[bits]
+            color = 0  # Transparent
+        palette.append(color)
     return palette
