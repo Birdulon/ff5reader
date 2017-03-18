@@ -70,6 +70,7 @@ if pyqt_version == 0:
         sys.exit(-1)
 
 bg_color = QColor(0, 0, 128)
+bg_trans = QColor(0, 0, 0, 0)
 
 monofont = QFont()
 monofont.setStyleHint(QFont.Monospace)
@@ -188,6 +189,7 @@ class FF5Reader(QMainWindow):
             j += z[1]
 
         self.battle_strips = make_character_battle_sprites(ROM_en)
+        status_strips = make_character_status_sprites(ROM_en)
 
         self.tabwidget = QTabWidget()
         strings_tab = QTabWidget()
@@ -203,7 +205,8 @@ class FF5Reader(QMainWindow):
         sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_small, scale=4), "Glyphs (JP)")
         sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, scale=2), "Glyphs (Large JP)")
         sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, scale=2), "Glyphs (Kanji)")
-        sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22), "Character Battle Sprites")
+        sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22, scale=2), "Character Battle Sprites")
+        sprites_tab.addTab(make_pixmap_table(status_strips, cols=22, scale=2), "Status Sprites")
         sprites_tab.addTab(self.enemy_sprites, "Enemy Sprites")
 
         structs_tab.addTab(make_table(zone_headers, zone_data, True), "Zones")
@@ -225,6 +228,22 @@ class FF5Reader(QMainWindow):
         self.setCentralWidget(self.main_widget)
         self.show()
 
+
+class Canvas:
+    def __init__(self, rows, columns, color=bg_trans):
+        self.image = QImage(8*rows, 8*columns, QImage.Format_ARGB32_Premultiplied)
+        self.image.fill(color)
+        self.painter = QtGui.QPainter(self.image)
+
+    def __del__(self):
+        del self.painter
+
+    def draw_pixmap(self, row, column, pixmap):
+        self.painter.drawPixmap(row*8, column*8, pixmap)
+
+    def pixmap(self):
+        return QPixmap.fromImage(self.image)
+
 def make_character_battle_sprites(rom):
     tile_address = 0x120000
     palette_address = 0x14A3C0
@@ -243,6 +262,31 @@ def make_character_battle_sprites(rom):
         del painter
         battle_strips.append(QPixmap.fromImage(battle_strip))
     return battle_strips
+
+def make_character_status_sprites(rom):
+    tile_address = 0x149400
+    palette_address = 0x14A660
+    pixmaps = []
+    for i in range(5):
+        palette = generate_palette(rom, palette_address + (i*22*32))  # Freelance palette per character
+        # We don't want the background drawn, so we'll make that colour transparent
+        palette[0] = 0
+        wounded = Canvas(3, 2)
+        for j in range(6):
+            offset = tile_address+(i*192)+(j*32)
+            wounded.draw_pixmap(j%3, j//3, create_tile(rom[offset:offset+32], palette))
+        pixmaps.append(wounded.pixmap())
+        mini_strip = Canvas(2, 19)
+        for j in range(38):
+            offset = tile_address+0x3C0+(j*24)
+            mini_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+24], palette))
+        pixmaps.append(mini_strip.pixmap())
+        frog_strip = Canvas(2, 15)
+        for j in range(30):
+            offset = tile_address+0x750+(j*24)
+            frog_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+24], palette))
+        pixmaps.append(frog_strip.pixmap())
+    return pixmaps
 
 def make_string_img_small(bytestring, jp=False):
     if len(bytestring) < 1:
@@ -429,9 +473,10 @@ def make_table(headers, items, sortable=False, row_labels=True, scale=2):
 def make_pixmap_table(items, cols=16, scale=4):
     rows = divceil(len(items), cols)
     rd = hex_length(rows-1)+1
+    cd = hex_length(cols-1)
     table = QTableWidget(rows, cols)
     table.setVerticalHeaderLabels(['0x{:0{}X}'.format(v*cols, rd) for v in range(rows)])
-    table.setHorizontalHeaderLabels(['0x{:X}'.format(v) for v in range(cols)])
+    table.setHorizontalHeaderLabels(['0x{:0{}X}'.format(v, cd) for v in range(cols)])
     for i in range(len(items)):
         item = items[i]
         lab = QLabel()
