@@ -187,7 +187,7 @@ class FF5Reader(QMainWindow):
                         npc_layers[-1].append("0x{:0{}X}".format(val, z[1]*2))
             j += z[1]
 
-        battle_strips = make_character_battle_sprites(ROM_en)
+        self.battle_strips = make_character_battle_sprites(ROM_en)
 
         self.tabwidget = QTabWidget()
         strings_tab = QTabWidget()
@@ -203,7 +203,7 @@ class FF5Reader(QMainWindow):
         sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_small, scale=4), "Glyphs (JP)")
         sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, scale=2), "Glyphs (Large JP)")
         sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, scale=2), "Glyphs (Kanji)")
-        sprites_tab.addTab(make_pixmap_table(battle_strips, cols=88), "Character Battle Sprites")
+        sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22), "Character Battle Sprites")
         sprites_tab.addTab(self.enemy_sprites, "Enemy Sprites")
 
         structs_tab.addTab(make_table(zone_headers, zone_data, True), "Zones")
@@ -229,15 +229,17 @@ def make_character_battle_sprites(rom):
     tile_address = 0x120000
     palette_address = 0x14A3C0
     battle_strips = []
-    for i in range(88):
-        palette = generate_palette(rom, palette_address + (i*32))
+    for i in range(0, 110*32, 32):
+        palette = generate_palette(rom, palette_address + i)
+        # We don't want the background drawn, so we'll make that colour transparent
+        palette[0] = 0
         battle_strip = QImage(16, 192, QImage.Format_ARGB32_Premultiplied)
         battle_strip.fill(QColor(0,0,0,0))
         painter = QtGui.QPainter(battle_strip)
-        for j in range(24):
-            offset = tile_address+(i*48*32)+(j*32)
-            painter.drawPixmap(j*8, 0, create_tile(rom[offset:offset+32], palette))
-            painter.drawPixmap(j*8, 8, create_tile(rom[offset+32:offset+64], palette))
+        for j in range(0, 24*8, 8):
+            offset = tile_address+(i*48)+(j*8)
+            painter.drawPixmap(0, j, create_tile(rom[offset:offset+32], palette))
+            painter.drawPixmap(8, j, create_tile(rom[offset+32:offset+64], palette))
         del painter
         battle_strips.append(QPixmap.fromImage(battle_strip))
     return battle_strips
@@ -385,6 +387,16 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
             stringlist.append(["0x{:06X}".format(j1), "0x{:0{}X}".format(id, id_digits), str_en, img_en, str_jp, img_jp])
     return stringlist
 
+def table_size_to_contents(table):
+    # Stupid hack to get table to size correctly
+    table.hide()
+    geometry = table.viewport().geometry()
+    table.viewport().setGeometry(QtCore.QRect(0, 0, 0x7FFFFFFF, 0x7FFFFFFF))
+    table.resizeColumnsToContents()
+    table.resizeRowsToContents()
+    table.viewport().setGeometry(geometry)
+    table.show()
+
 def make_table(headers, items, sortable=False, row_labels=True, scale=2):
     """
     Helper function to tabulate 2d lists
@@ -408,16 +420,7 @@ def make_table(headers, items, sortable=False, row_labels=True, scale=2):
             if item[:2] == "0x":
                 q_item.setFont(monofont)
             table.setItem(row, col, q_item)
-
-    # Stupid hack to get table to size correctly
-    table.hide()
-    geometry = table.viewport().geometry()
-    table.viewport().setGeometry(QtCore.QRect(0, 0, 0x7FFFFFFF, 0x7FFFFFFF))
-    table.resizeColumnsToContents()
-    table.resizeRowsToContents()
-    table.viewport().setGeometry(geometry)
-    table.show()
-
+    table_size_to_contents(table)
     if sortable:
         table.setSortingEnabled(True)
         table.sortItems(0)
@@ -434,7 +437,7 @@ def make_pixmap_table(items, cols=16, scale=4):
         lab = QLabel()
         lab.setPixmap(item.scaled(item.size() * scale))
         table.setCellWidget(i // cols, i % cols, lab)
-    table.resizeColumnsToContents()
+    table_size_to_contents(table)
     return table
 
 
