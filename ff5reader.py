@@ -109,7 +109,7 @@ class FF5Reader(QMainWindow):
         glyph_sprites_jp_small = generate_glyphs(ROM_jp, 0x11F000)
         glyph_sprites_jp_large = generate_glyphs_large(ROM_jp, 0x03E800)
         glyph_sprites_kanji = generate_glyphs_large(ROM_jp, 0x1BD000, 0x1AA)  # Kanji are unchanged in EN version
-        #glyph_sprites_jp_dialogue = {i:v for i, v in chain(enumerate(glyph_sprites_jp_large[0x20:0xEB]), enumerate(glyph_sprites_kanji, 0x1E00))}
+
         global zone_names
         zone_names = make_string_img_list(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200, indirect=True, large=True)
         items = make_string_img_list(0x111380, 9, 256)
@@ -117,6 +117,8 @@ class FF5Reader(QMainWindow):
         more_magics = make_string_img_list(0x111E8A, 9, 73)
         enemy_names = make_string_img_list(0x200050, 10, 0x180, 0x105C00, 8)
         job_names = make_string_img_list(0x115600, 8, 22)
+        ability_names = make_string_img_list(0x116200, 8, 33)
+        battle_commands = make_string_img_list(0x201150, 7, 0x60, 0x115800, 5)
         dialogue = make_string_img_list(0x2013F0, 3, 0x900, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros_en=const.Dialogue_Macros_EN, macros_jp=const.Dialogue_Macros_JP)
 
         zone_structure = [("NPC Layer", 2, None),
@@ -226,15 +228,38 @@ class FF5Reader(QMainWindow):
         strings_tab.addTab(make_table(imglist_headers, more_magics, row_labels=False), "More Magics")
         strings_tab.addTab(make_table(imglist_headers, enemy_names, row_labels=False), "Enemy Names")
         strings_tab.addTab(make_table(imglist_headers, job_names, row_labels=False), "Job Names")
+        strings_tab.addTab(make_table(imglist_headers, ability_names, row_labels=False), "Ability Names")
+        strings_tab.addTab(make_table(imglist_headers, battle_commands, row_labels=False), "Battle Commands")
         strings_tab.addTab(make_table(imglist_headers, zone_names, True, scale=1), "Zone Names")
         strings_tab.addTab(make_table(imglist_headers+['JP address'], dialogue, scale=1), "Dialogue")
+
+        self.string_decoder = QWidget()
+        self.decoder_input = QLineEdit()
+        self.decoder_input.returnPressed.connect(self._string_decode)
+        self.decoder_layout = QVBoxLayout()
+        self.decoder_layout.addWidget(self.decoder_input)
+        self.string_decoder.setLayout(self.decoder_layout)
+        strings_tab.addTab(self.string_decoder, "String Decoder")
 
         layout = QHBoxLayout()
         layout.addWidget(self.tabwidget)
         self.main_widget = QWidget(self)
         self.main_widget.setLayout(layout)
+        self.main_widget.setMinimumSize(800,600)
         self.setCentralWidget(self.main_widget)
         self.show()
+
+    def _string_decode(self):
+        string = ''.join(self.decoder_input.text().split())
+        if len(string) % 1:
+            string += '0'
+        bytelist = [int(string[i:i+2], 16) for i in range(0, len(string), 2)]
+        tups = make_string_img_small(bytes(bytelist))
+        print(tups[0])
+        img = QLabel()
+        img.setPixmap(tups[1])
+        self.decoder_layout.addWidget(img)
+        self.decoder_input.setText('')
 
 
 class Canvas:
@@ -242,14 +267,22 @@ class Canvas:
         self.image = QImage(8*rows, 8*columns, QImage.Format_ARGB32_Premultiplied)
         self.image.fill(color)
         self.painter = QtGui.QPainter(self.image)
+        self.max_x = 1
+        self.max_y = 1
 
     def __del__(self):
         del self.painter
 
     def draw_pixmap(self, row, column, pixmap):
         self.painter.drawPixmap(row*8, column*8, pixmap)
+        if row > self.max_x:
+            self.max_x = row
+        if column > self.max_y:
+            self.max_y = column
 
-    def pixmap(self):
+    def pixmap(self, trim=False):
+        if trim:
+            return QPixmap.fromImage(self.image.copy(0, 0, self.max_x*8+8, self.max_y*8+8))
         return QPixmap.fromImage(self.image)
 
 def parse_struct(rom, offset, structure):
@@ -273,6 +306,7 @@ def make_enemy_sprites(rom):
         pal_offset = ((((rom[0x14B182+e_id]&0x03)<<8)| rom[0x14B183+e_id]) << 4) + 0x0ED000  # For whatever reason this is big endian
         pal_size = 16 if triplane else 32
         palette = generate_palette(rom, pal_offset, pal_size)
+        palette[0] = 0
         layout_id = rom[0x14B184+e_id]
         boss_layout = bool(rom[0x14B182+e_id]&0x80)
         if boss_layout:
@@ -291,7 +325,7 @@ def make_enemy_sprites(rom):
                     tile_offset += bytes_per_tile
 
         # TODO: Shadow stuff
-        sprites.append(sprite.pixmap())
+        sprites.append(sprite.pixmap(True))
     return sprites
 
 def make_character_battle_sprites(rom):
@@ -527,6 +561,7 @@ def make_pixmap_table(items, cols=16, scale=4):
         item = items[i]
         lab = QLabel()
         lab.setPixmap(item.scaled(item.size() * scale))
+        lab.setAlignment(QtCore.Qt.AlignCenter)
         table.setCellWidget(i // cols, i % cols, lab)
     table_size_to_contents(table)
     return table
