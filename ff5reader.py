@@ -116,6 +116,7 @@ class FF5Reader(QMainWindow):
         magics = make_string_img_list(0x111C80, 6, 87)
         more_magics = make_string_img_list(0x111E8A, 9, 73)
         enemy_names = make_string_img_list(0x200050, 10, 0x180, 0x105C00, 8)
+        character_names = make_string_img_list(0x115500, 6, 5)
         job_names = make_string_img_list(0x115600, 8, 22)
         ability_names = make_string_img_list(0x116200, 8, 33)
         battle_commands = make_string_img_list(0x201150, 7, 0x60, 0x115800, 5)
@@ -227,6 +228,7 @@ class FF5Reader(QMainWindow):
         strings_tab.addTab(make_table(imglist_headers, magics, row_labels=False), "Magics")
         strings_tab.addTab(make_table(imglist_headers, more_magics, row_labels=False), "More Magics")
         strings_tab.addTab(make_table(imglist_headers, enemy_names, row_labels=False), "Enemy Names")
+        strings_tab.addTab(make_table(imglist_headers, character_names, row_labels=False), "Character Names")
         strings_tab.addTab(make_table(imglist_headers, job_names, row_labels=False), "Job Names")
         strings_tab.addTab(make_table(imglist_headers, ability_names, row_labels=False), "Ability Names")
         strings_tab.addTab(make_table(imglist_headers, battle_commands, row_labels=False), "Battle Commands")
@@ -417,7 +419,7 @@ def make_string_img_large(bytestring, macros=None, jp=False):
     string = ""
     # Because the length of the input has little bearing on the size of the image thanks to linebreaks and macros, we overprovision then clip away.
     max_width = 256  # This seems to check out, but the EN dialogue has linebreaks virtually everywhere anyway
-    max_height = 512  # I've seen up to 58 rows in EN, 36 in JP. Stay safe.
+    max_height = 1024  # I've seen up to 58 rows in EN, 36 in JP. Stay safe.
     img = QImage(max_width, max_height, QImage.Format_RGB16)
     img.fill(bg_color)
     painter = QtGui.QPainter(img)
