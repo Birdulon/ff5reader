@@ -287,6 +287,7 @@ class Canvas:
             return QPixmap.fromImage(self.image.copy(0, 0, self.max_x*8+8, self.max_y*8+8))
         return QPixmap.fromImage(self.image)
 
+
 def parse_struct(rom, offset, structure):
     out = ["0x{:06X}".format(offset)]
     j = 0
@@ -298,6 +299,7 @@ def parse_struct(rom, offset, structure):
             out.append("0x{:0{}X}".format(val, z[1]*2))
         j += z[1]
     return out
+
 
 def make_enemy_sprites(rom):
     sprites = []
@@ -330,6 +332,7 @@ def make_enemy_sprites(rom):
         sprites.append(sprite.pixmap(True))
     return sprites
 
+
 def make_character_battle_sprites(rom):
     tile_address = 0x120000
     palette_address = 0x14A3C0
@@ -344,6 +347,7 @@ def make_character_battle_sprites(rom):
             battle_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+32], palette))
         battle_strips.append(battle_strip.pixmap())
     return battle_strips
+
 
 def make_character_status_sprites(rom):
     tile_address = 0x149400
@@ -370,6 +374,7 @@ def make_character_status_sprites(rom):
         pixmaps.append(frog_strip.pixmap())
     return pixmaps
 
+
 def make_string_img_small(bytestring, jp=False):
     if len(bytestring) < 1:
         raise ValueError('Empty bytestring was passed')
@@ -395,6 +400,7 @@ def make_string_img_small(bytestring, jp=False):
             painter.drawPixmap(x*8, 1, glyph_sprites_en_small[j])
     del painter
     return string, QPixmap.fromImage(img)
+
 
 def make_string_img_large(bytestring, macros=None, jp=False):
     '''
@@ -455,6 +461,7 @@ def make_string_img_large(bytestring, macros=None, jp=False):
     xmax = x if x > xmax else xmax
     return string, QPixmap.fromImage(img.copy(0, 0, xmax, y+16))
 
+
 def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None,
                          indirect=False, large=False, macros_en=None, macros_jp=None):
     start_jp = start if start_jp is None else start_jp
@@ -513,6 +520,7 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
             stringlist.append(["0x{:06X}".format(j1), "0x{:0{}X}".format(id, id_digits), str_en, img_en, str_jp, img_jp])
     return stringlist
 
+
 def table_size_to_contents(table):
     # Stupid hack to get table to size correctly
     table.hide()
@@ -522,6 +530,7 @@ def table_size_to_contents(table):
     table.resizeRowsToContents()
     table.viewport().setGeometry(geometry)
     table.show()
+
 
 def make_table(headers, items, sortable=False, row_labels=True, scale=2):
     """
@@ -551,6 +560,7 @@ def make_table(headers, items, sortable=False, row_labels=True, scale=2):
         table.setSortingEnabled(True)
         table.sortItems(0)
     return table
+
 
 def make_pixmap_table(items, cols=16, scale=4):
     rows = divceil(len(items), cols)
