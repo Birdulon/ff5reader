@@ -139,7 +139,7 @@ def generate_glyphs_large(rom, offset, num=0x100):
         spritelist.append(create_tritile(rom[j:j+24]))
     return spritelist
 
-def generate_palette(rom, offset, length=32):
+def generate_palette(rom, offset, length=32, transparent=False):
     '''
     Length is in bytes not colors (2 bytes per color)
     We need to convert BGR555 to ARGB32 for each 2 bytes
@@ -155,4 +155,6 @@ def generate_palette(rom, offset, length=32):
         else:
             color = 0  # Transparent
         palette.append(color)
+    if transparent:
+      palette[0] = 0
     return palette

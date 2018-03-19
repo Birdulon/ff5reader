@@ -17,6 +17,7 @@ skip_pyqt5 = 'PYQT4' in os.environ
 filename_en = 'Final Fantasy V (Japan) [En by RPGe v1.1].sfc'
 filename_jp = 'Final Fantasy V (Japan).sfc'
 filename_jp_ff4 = 'Final Fantasy IV (Japan) (Rev A).sfc'
+filename_jp_ff6 = 'Final Fantasy VI (Japan).sfc'
 
 if not skip_pyqt5:
     try:
@@ -97,7 +98,10 @@ with open(filename_jp, 'rb') as file:
 print(len(ROM_jp), filename_jp)
 with open(filename_jp_ff4, 'rb') as file:
     ROM_FF4jp = file.read()
-print(len(ROM_jp), filename_jp)
+print(len(ROM_FF4jp), filename_jp_ff4)
+with open(filename_jp_ff6, 'rb') as file:
+    ROM_FF6jp = file.read()
+print(len(ROM_FF6jp), filename_jp_ff6)
 
 stringlist_headers = ['Address', 'ID', 'Name']
 imglist_headers = stringlist_headers + ['Img', 'Name JP', 'Img JP']
@@ -207,6 +211,8 @@ class FF5Reader(QMainWindow):
     status_strips = make_character_status_sprites(ROM_en)
     enemy_sprites = make_enemy_sprites(ROM_en)
     self.battle_strips_ff4 = make_character_battle_sprites_ff4(ROM_FF4jp)
+    self.battle_strips_ff6 = make_character_battle_sprites_ff6(ROM_FF6jp)
+    self.portraits_ff6 = make_character_portrait_sprites_ff6(ROM_FF6jp)
 
     enemy_sprites_named = [stack_labels(s, d[-2]) for s, d in zip(enemy_sprites, enemy_sprite_data)]
 
@@ -228,6 +234,8 @@ class FF5Reader(QMainWindow):
     #sprites_tab.addTab(make_pixmap_table(enemy_sprites, scale=1), 'Enemy Sprites')
     sprites_tab.addTab(make_pixmap_table(enemy_sprites_named, cols=32, scale=1), 'Enemy Sprites')
     sprites_tab.addTab(make_pixmap_table(self.battle_strips_ff4, cols=16, scale=2), 'FF4 Character Battle Sprites')
+    sprites_tab.addTab(make_pixmap_table(self.battle_strips_ff6, cols=32, scale=2), 'FF6 Character Battle Sprites')
+    sprites_tab.addTab(make_pixmap_table(self.portraits_ff6, cols=19, scale=2), 'FF6 Character Portraits')
 
 
     structs_tab.addTab(make_table(zone_headers, zone_data, True), 'Zones')
@@ -286,12 +294,12 @@ class Canvas:
   def __del__(self):
     del self.painter
 
-  def draw_pixmap(self, row, column, pixmap):
-    self.painter.drawPixmap(row*8, column*8, pixmap)
-    if row > self.max_x:
-      self.max_x = row
-    if column > self.max_y:
-      self.max_y = column
+  def draw_pixmap(self, col, row, pixmap):
+    self.painter.drawPixmap(col*8, row*8, pixmap)
+    if col > self.max_x:
+      self.max_x = col
+    if row > self.max_y:
+      self.max_y = row
 
   def pixmap(self, trim=False):
     if trim:
@@ -320,8 +328,7 @@ def make_enemy_sprites(rom):
     tile_offset = ((((rom[0x14B180+e_id]&0x7F)<<8)| rom[0x14B181+e_id]) << 3) + 0x150000  # For whatever reason this is big endian
     pal_offset = ((((rom[0x14B182+e_id]&0x03)<<8)| rom[0x14B183+e_id]) << 4) + 0x0ED000  # For whatever reason this is big endian
     pal_size = 16 if triplane else 32
-    palette = generate_palette(rom, pal_offset, pal_size)
-    palette[0] = 0
+    palette = generate_palette(rom, pal_offset, pal_size, transparent=True)
     layout_id = rom[0x14B184+e_id]
     boss_layout = bool(rom[0x14B182+e_id]&0x80)
     if boss_layout:
@@ -345,9 +352,8 @@ def make_enemy_sprites(rom):
 
 
 def make_battle_strip(rom, palette_address, tile_address, num_tiles):
-  palette = generate_palette(rom, palette_address)
+  palette = generate_palette(rom, palette_address, transparent=True)
   # We don't want the background drawn, so we'll make that colour transparent
-  palette[0] = 0
   battle_strip = Canvas(2, divceil(num_tiles, 2))  # KO sprites are here which means more tiles than FFV
   for j in range(num_tiles):
     offset = tile_address+(j*32)
@@ -371,6 +377,49 @@ def make_character_battle_sprites_ff4(rom):
   for i in range(0, 16*32, 32):  # 16 pigs.
     battle_strips.append(make_battle_strip(rom, palette_address+i, pig_tile_address, 48))
   return battle_strips
+
+
+def make_character_battle_sprites_ff6(rom):
+  # Palettes are non-trivial for this, will need a LUT
+  tile_address = 0x150000
+  palette_address = 0x268000
+  battle_strips = []
+  for i in range(0, 16*32, 32):  # quite a few characters
+    battle_strips.append(make_battle_strip(rom, palette_address+0x80, tile_address+(i*181), 181))
+  tile_address += 16*181*32
+  for i in range(0, 6*32, 32):  # bonus memes
+    battle_strips.append(make_battle_strip(rom, palette_address+0x80, tile_address+(i*171), 171))
+  tile_address += 6*171*32
+  for i in range(0, 4*32, 32):  # bonus memes
+    battle_strips.append(make_battle_strip(rom, palette_address+0x80, tile_address+(i*55), 55))
+  tile_address += 4*55*32
+  for i in range(0, 40*32, 32):  # bonus memes
+    battle_strips.append(make_battle_strip(rom, palette_address+0x80, tile_address+(i*56), 56))
+  return battle_strips
+
+def make_character_portrait_sprites_ff6(rom):
+  # 5x5 tiles per character, annoying arrangement but palettes are good
+  tile_address = 0x2D1D00
+  palette_address = 0x2D5860
+  palettes = [generate_palette(rom, palette_address+i*32, transparent=True) for i in range(19)]
+  # Coordinates for each tile
+  LUT = [(0,0), (1,0), (2,0), (3,0), (0,2), (1,2), (2,2), (3,2), (4,0), (4,1), (4,2), (4,3), (4,4), (0,4), (1,4), (2,4), (0,1), (1,1), (2,1), (3,1), (0,3), (1,3), (2,3), (3,3), (3,4)]
+  portraits = []
+  for palette, t_start in zip(palettes, [tile_address+i*25*32 for i in range(19)]):
+    canvas = Canvas(5, 5)
+    for t in range(25):
+      offset = t_start+(t*32)
+      canvas.draw_pixmap(*LUT[t], create_tile(rom[offset:offset+32], palette))
+    portraits.append(canvas.pixmap())
+  # Palette-swap time!
+  for palette in palettes:
+    for t_start in [tile_address+i*25*32 for i in range(19)]:
+      canvas = Canvas(5, 5)
+      for t in range(25):
+        offset = t_start+(t*32)
+        canvas.draw_pixmap(*LUT[t], create_tile(rom[offset:offset+32], palette))
+      portraits.append(canvas.pixmap())
+  return portraits
 
 
 def make_character_battle_sprites(rom):
