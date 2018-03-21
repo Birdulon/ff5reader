@@ -8,7 +8,7 @@ import os
 from struct import unpack
 from itertools import chain
 from array import array
-from snestile import generate_glyphs, generate_glyphs_large, generate_palette, create_tile
+from snestile import generate_glyphs, generate_glyphs_large, generate_palette, create_tile, create_tile_mode7_compressed
 import const
 import time
 
@@ -207,35 +207,50 @@ class FF5Reader(QMainWindow):
     for i in range(0x180):
       enemy_sprite_data.append(parse_struct(ROM_en, address + (i*5), enemy_sprite_structure) + enemy_names[i][2:4])
 
+    worldmap_tiles = make_world_map_tiles(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
+    worldmap_tiles += make_world_map_tiles(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)
+    worldmap_tiles += make_world_map_tiles(ROM_jp, 0x1BC000, 0x0FFBC0, 0x0FFEC0, length=128)
     self.battle_strips = make_character_battle_sprites(ROM_en)
     status_strips = make_character_status_sprites(ROM_en)
     enemy_sprites = make_enemy_sprites(ROM_en)
     self.battle_strips_ff4 = make_character_battle_sprites_ff4(ROM_FF4jp)
+    self.field_strips_ff4 = make_character_field_sprites_ff4(ROM_FF4jp)
+    self.portraits_ff4 = make_character_portrait_sprites_ff4(ROM_FF4jp)
     self.battle_strips_ff6 = make_character_battle_sprites_ff6(ROM_FF6jp)
     self.portraits_ff6 = make_character_portrait_sprites_ff6(ROM_FF6jp)
 
     enemy_sprites_named = [stack_labels(s, d[-2]) for s, d in zip(enemy_sprites, enemy_sprite_data)]
 
-    self.tabwidget = QTabWidget()
+    self.gamewidget = QTabWidget()
+    self.ff4widget = QTabWidget()
+    self.ff5widget = QTabWidget()
+    self.ff6widget = QTabWidget()
+    self.gamewidget.addTab(self.ff5widget, 'FFV')
+    self.gamewidget.addTab(self.ff4widget, 'FFIV')
+    self.gamewidget.addTab(self.ff6widget, 'FFVI')
     strings_tab = QTabWidget()
     structs_tab = QTabWidget()
     sprites_tab = QTabWidget()
-    self.tabwidget.addTab(strings_tab, 'Strings')
-    self.tabwidget.addTab(structs_tab, 'Structs')
-    self.tabwidget.addTab(sprites_tab, 'Images')
+    self.ff5widget.addTab(strings_tab, 'Strings')
+    self.ff5widget.addTab(structs_tab, 'Structs')
+    self.ff5widget.addTab(sprites_tab, 'Images')
 
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_small, scale=4), 'Glyphs (EN)')
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_large, scale=2), 'Glyphs (Dialogue EN)')
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_small, scale=4), 'Glyphs (JP)')
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, scale=2), 'Glyphs (Large JP)')
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, scale=2),    'Glyphs (Kanji)')
+    sprites_tab.addTab(make_pixmap_table(worldmap_tiles, cols=16, scale=4), 'Worldmap Tiles')
     sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22, scale=2), 'Character Battle Sprites')
     sprites_tab.addTab(make_pixmap_table(status_strips, cols=22, scale=2), 'Status Sprites')
     #sprites_tab.addTab(make_pixmap_table(enemy_sprites, scale=1), 'Enemy Sprites')
     sprites_tab.addTab(make_pixmap_table(enemy_sprites_named, cols=32, scale=1), 'Enemy Sprites')
-    sprites_tab.addTab(make_pixmap_table(self.battle_strips_ff4, cols=16, scale=2), 'FF4 Character Battle Sprites')
-    sprites_tab.addTab(make_pixmap_table(self.battle_strips_ff6, cols=32, scale=2), 'FF6 Character Battle Sprites')
-    sprites_tab.addTab(make_pixmap_table(self.portraits_ff6, cols=19, scale=2), 'FF6 Character Portraits')
+
+    self.ff4widget.addTab(make_pixmap_table(self.battle_strips_ff4, cols=16, scale=2), 'Character Battle Sprites')
+    self.ff4widget.addTab(make_pixmap_table(self.portraits_ff4, cols=14, scale=2), 'Character Portraits')
+    self.ff4widget.addTab(make_pixmap_table(self.field_strips_ff4, cols=17, scale=2), 'Character Field Sprites')
+    self.ff6widget.addTab(make_pixmap_table(self.battle_strips_ff6, cols=32, scale=2), 'Character Sprites')
+    self.ff6widget.addTab(make_pixmap_table(self.portraits_ff6, cols=19, scale=2), 'Character Portraits')
 
 
     structs_tab.addTab(make_table(zone_headers, zone_data, True), 'Zones')
@@ -263,7 +278,7 @@ class FF5Reader(QMainWindow):
     strings_tab.addTab(self.string_decoder, 'String Decoder')
 
     layout = QHBoxLayout()
-    layout.addWidget(self.tabwidget)
+    layout.addWidget(self.gamewidget)
     self.main_widget = QWidget(self)
     self.main_widget.setLayout(layout)
     self.main_widget.setMinimumSize(800,600)
@@ -351,24 +366,35 @@ def make_enemy_sprites(rom):
   return sprites
 
 
-def make_battle_strip(rom, palette_address, tile_address, num_tiles):
-  palette = generate_palette(rom, palette_address, transparent=True)
-  # We don't want the background drawn, so we'll make that colour transparent
+def make_world_map_tiles(rom, tiles_address, lut_address, palette_address, length=0x100):
+  tiles = []
+  palettes = [generate_palette(rom, palette_address+i*32, transparent=True) for i in range(16)]
+  for i in range(length):
+    palette = palettes[rom[lut_address+i]//16]
+    tiles.append(create_tile_mode7_compressed(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
+  return tiles
+
+def make_battle_strip(rom, palette_address, tile_address, num_tiles, bpp=4):
+  if isinstance(palette_address, int):
+    palette = generate_palette(rom, palette_address, transparent=True)
+  else:
+    palette = palette_address
+  b = 24 if bpp==3 else 32
   battle_strip = Canvas(2, divceil(num_tiles, 2))  # KO sprites are here which means more tiles than FFV
   for j in range(num_tiles):
-    offset = tile_address+(j*32)
-    battle_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+32], palette))
+    offset = tile_address+(j*b)
+    battle_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+b], palette))
   return battle_strip.pixmap()
 
 
 def make_character_battle_sprites_ff4(rom):
-  tile_address = 0x0D0000
-  pig_tile_address = 0x0D7000
-  golbez_tile_address = 0x0D7600
-  anna_tile_address = 0x0D7960
-  palette_address = 0x0E7D00
-  golbez_palette_address = 0x0E7EC0
-  anna_palette_address = 0x0E7EE0
+  tile_address = 0xD0000
+  pig_tile_address = 0xD7000
+  golbez_tile_address = 0xD7600
+  anna_tile_address = 0xD7960
+  palette_address = 0xE7D00
+  golbez_palette_address = 0xE7EC0
+  anna_palette_address = 0xE7EE0
   battle_strips = []
   for i in range(0, 14*32, 32):  # 14 regular characters. Pig, Golbez and Anna follow with different tile spacing and palette order.
     battle_strips.append(make_battle_strip(rom, palette_address+i, tile_address+(i*64), 64))  # KO sprites are here which means more tiles per strip than FFV
@@ -377,6 +403,51 @@ def make_character_battle_sprites_ff4(rom):
   for i in range(0, 16*32, 32):  # 16 pigs.
     battle_strips.append(make_battle_strip(rom, palette_address+i, pig_tile_address, 48))
   return battle_strips
+
+def make_character_field_sprites_ff4(rom):
+  tile_address = 0xD8000
+  palette_address = 0x68000
+  palettes = [generate_palette(rom, palette_address+i*16, transparent=True) for i in range(8)]
+  LUT = [0, 0, 1, 2, 2, 2, 0, 1, 1, 3, 0, 1, 0, 0,  0,0,0]
+  strips = []
+  for p, i in zip(LUT, range(0, 17*24*32, 24*32)):  # 14 regular characters. Mini, toad, pig.
+    strips.append(make_battle_strip(rom, palettes[p], tile_address+(i), 32, bpp=3))
+  for palette in palettes:
+    for i in range(0, 42*24*16, 24*16):  # 42 others
+      strips.append(make_battle_strip(rom, palette, tile_address+(17*24*32)+(i), 16, bpp=3))
+  #for i in range(0, 16*24, 24):  # 16 pigs.
+    #strips.append(make_battle_strip(rom, palette_address+i, tile_address, 48))
+  return strips
+
+def make_character_portrait_sprites_ff4(rom):
+  # 4x4 tiles per character, all 3bpp
+  tile_address = 0xED3C0
+  palette_address = 0x686D0
+  palettes = [generate_palette(rom, palette_address+i*16, transparent=True) for i in range(14)]
+  portraits = []
+  for palette, t_start in zip(palettes, [tile_address+i*16*24 for i in range(14)]):
+    canvas = Canvas(4, 4)
+    for t in range(16):
+      offset = t_start+(t*24)
+      canvas.draw_pixmap(t%4, t//4, create_tile(rom[offset:offset+24], palette))
+    portraits.append(canvas.pixmap())
+  # Pig, mini, toad
+  for t_start in [tile_address+i*16*24 for i in range(14, 17)]:
+    for palette in palettes:
+      canvas = Canvas(4, 4)
+      for t in range(16):
+        offset = t_start+(t*24)
+        canvas.draw_pixmap(t%4, t//4, create_tile(rom[offset:offset+24], palette))
+      portraits.append(canvas.pixmap())
+  # Palette-swap time!
+  for palette in palettes:
+    for t_start in [tile_address+i*16*24 for i in range(14)]:
+      canvas = Canvas(4, 4)
+      for t in range(16):
+        offset = t_start+(t*24)
+        canvas.draw_pixmap(t%4, t//4, create_tile(rom[offset:offset+24], palette))
+      portraits.append(canvas.pixmap())
+  return portraits
 
 
 def make_character_battle_sprites_ff6(rom):
