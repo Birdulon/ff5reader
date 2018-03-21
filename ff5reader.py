@@ -396,8 +396,8 @@ def make_field_tiles(rom, id, palette):
 def make_field_minitiles(rom, id, palette):
   tiles_address = indirect(rom, 0x1C0000 + id*2) + 0x1C0024
   tiles = []
-  for i in range(128):
-    tiles.append(create_tile(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
+  for i in range(256):
+    tiles.append(create_tile(rom[tiles_address+i*16:tiles_address+i*16+16], palette))
   return tiles
 
 def make_field_map_tiles(rom, id):
