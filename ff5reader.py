@@ -132,6 +132,13 @@ class FF5Reader(QMainWindow):
     battle_commands = make_string_img_list(0x201150, 7, 0x60, 0x115800, 5)
     dialogue = make_string_img_list(0x2013F0, 3, 0x900, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros_en=const.Dialogue_Macros_EN, macros_jp=const.Dialogue_Macros_JP)
 
+    def split_tilesets(data):
+      tilesets = [(data & 0x00003F),
+                  (data & 0x000FC0) >> 6,
+                  (data & 0x03F000) >> 12,
+                  (data & 0xFC0000) >> 18]
+      return ' '.join([hex(i,2) for i in tilesets])
+
     zone_structure = [('NPC Layer',      2, None),
                       ('Name',           1, [z[2] for z in zone_names]),
                       ('ShadowFlags',    1, None),
@@ -139,9 +146,7 @@ class FF5Reader(QMainWindow):
                       (hex(5, 2),        1, None),
                       ('Flags '+hex(6,2),1, None),
                       (hex(7, 2),        1, None),
-                      ('Tileset',        1, None),
-                      ('Tileset2',       2, None),
-                      #('0x0A',           1, None),
+                      ('Tilesets',       3, split_tilesets),
                       (hex(11, 2),       1, None),
                       ('Collision Layer',1, None),
                       (hex(13, 2),       1, None),
@@ -210,7 +215,7 @@ class FF5Reader(QMainWindow):
     worldmap_tiles = make_world_map_tiles(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
     worldmap_tiles += make_world_map_tiles(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)
     worldmap_tiles += make_world_map_tiles(ROM_jp, 0x1BC000, 0x0FFBC0, 0x0FFEC0, length=128)
-    fieldmap_tiles = [make_field_map_tileset(ROM_jp, i) for i in range(64)]
+    fieldmap_tiles = [make_field_map_tileset(ROM_jp, i) for i in range(const.zone_count)]
     self.battle_strips = make_character_battle_sprites(ROM_en)
     status_strips = make_character_status_sprites(ROM_en)
     enemy_sprites = make_enemy_sprites(ROM_en)
@@ -327,13 +332,15 @@ class Canvas:
 def parse_struct(rom, offset, structure):
   out = [hex(offset, 6)]
   j = 0
-  for z in structure:
-    val = int.from_bytes(rom[offset+j:offset+j+z[1]],'little')
-    if z[2] and val < len(z[2]):
-      out.append(z[2][val])
+  for title, length, handler in structure:
+    val = indirect(rom, offset+j, length=length)  # int.from_bytes(rom[offset+j:offset+j+z[1]],'little')
+    if callable(handler):
+      out.append(handler(val))
+    elif handler and val < len(handler):
+      out.append(handler[val])
     else:
-      out.append(hex(val, z[1]*2))
-    j += z[1]
+      out.append(hex(val, length*2))
+    j += length
   return out
 
 
@@ -376,37 +383,51 @@ def make_world_map_tiles(rom, tiles_address, lut_address, palette_address, lengt
     tiles.append(create_tile_mode7_compressed(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
   return tiles
 
+def make_field_tiles(rom, id, palette):
+  #tile_offset = indirect(rom, 0x1C2D84 + id*4) + 0x2E24
+  #tile_bank = indirect(rom, 0x1C2D86 + id*4) + 0x1C
+  #tiles_address = tile_bank*0x10000 + tile_offset
+  tiles_address = indirect(rom, 0x1C2D84 + id*4, length=4) + 0x1C2E24
+  tiles = []
+  for i in range(256):
+    tiles.append(create_tile(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
+  return tiles
+
+def make_field_minitiles(rom, id, palette):
+  tiles_address = indirect(rom, 0x1C0000 + id*2) + 0x1C0024
+  tiles = []
+  for i in range(128):
+    tiles.append(create_tile(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
+  return tiles
+
 def make_field_map_tiles(rom, id):
   '''
   This is a bit of a mess of pointer chains for now, so generalising it will have to wait.
   Palette selection is probably determined by the tilemap which is outside the scope of this, so we'll just use #1.
+  UPDATE: i2-i7 merely obtain a zone ID. Whoops.
   '''
-  i2 = indirect(rom, 0x0E2400 + id*2)
-  i3 = indirect(rom, 0x0E2402 + i2)*2
-  i4 = indirect(rom, 0x18E080 + i3)
-  i5 = indirect(rom, 0x18E081 + i4+4)*3
-  i6 = indirect(rom, 0x083320 + i5)
-  i7 = indirect(rom, 0x080001 + i6) & 0x03FF
-  i8 = i7 * 0x1A
-
-  tile_index = (indirect(rom, 0x0E9C09 + i8)&0x3F)*4
-  tile_offset = indirect(rom, 0x1C2D84 + tile_index) + 0x2E24
-  tile_bank = indirect(rom, 0x1C2D86 + tile_index) + 0x1C
-  tiles_address = tile_bank*0x10000 + tile_offset
+  #i2 = indirect(rom, 0x0E2400 + id*2)
+  #i3 = indirect(rom, 0x0E2402 + i2)*2
+  #i4 = indirect(rom, 0x18E080 + i3)
+  #i5 = indirect(rom, 0x18E081 + i4+4)*3
+  #i6 = indirect(rom, 0x083320 + i5)
+  #i7 = indirect(rom, 0x080001 + i6) & 0x03FF
+  i8 = id * 0x1A
+  tilesets = indirect(rom, 0x0E9C09 + i8, length=3)
+  tile_index_0 = (tilesets & 0x00003F)        # (indirect(rom, 0x0E9C09 + i8) & 0x003F)
+  tile_index_1 = (tilesets & 0x000FC0) >> 6   # (indirect(rom, 0x0E9C09 + i8) & 0x0FC0)>>6
+  tile_index_2 = (tilesets & 0x03F000) >> 12  # (indirect(rom, 0x0E9C0A + i8) & 0x03F0)>>4
+  tile_index_3 = (tilesets & 0xFC0000) >> 18  # (indirect(rom, 0x0E9C0A + i8) & 0x03F0)>>4
   pal_offset = indirect(rom, 0x0E9C16 + i8) * 0x100
   palette_address = 0x03BB00 + pal_offset
   print(pal_offset, palette_address)
   palettes = [generate_palette(rom, palette_address+i*32, transparent=True) for i in range(8)]
 
-  tiles = []
-  for i in range(256):
-    palette = palettes[1]
-    tiles.append(create_tile(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
-  return tiles
+  return make_field_tiles(rom, tile_index_0, palettes[1])+make_field_tiles(rom, tile_index_1, palettes[1])+make_field_tiles(rom, tile_index_2, palettes[1])+make_field_minitiles(rom, tile_index_3, palettes[1])
 
 def make_field_map_tileset(rom, id):
   tiles = make_field_map_tiles(rom, id)
-  canvas = Canvas(16, 16)
+  canvas = Canvas(16, len(tiles)//16)
   for i, tile in enumerate(tiles):
     canvas.draw_pixmap(i%16, i//16, tile)
   return canvas.pixmap()
