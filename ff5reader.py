@@ -168,16 +168,16 @@ class FF5Reader(QMainWindow):
     tileset_data = []
     for i in range(0x1C):
       offset = 0x0F0000 + (i*2)
-      pointer = 0x0F0000 + int.from_bytes(ROM_en[offset:offset+2],'little')
-      length = int.from_bytes(ROM_en[offset+2:offset+4],'little') - int.from_bytes(ROM_en[offset:offset+2],'little')
+      pointer = 0x0F0000 + indirect(ROM_en, offset)  # int.from_bytes(ROM_en[offset:offset+2],'little')
+      length = indirect(ROM_en, offset+2) - indirect(ROM_en, offset)  # int.from_bytes(ROM_en[offset+2:offset+4],'little') - int.from_bytes(ROM_en[offset:offset+2],'little')
       tileset_data.append((hex(i, 2), hex(offset, 6), hex(pointer, 6), hex(length, 4)))
 
     npc_layers = []
     offset = 0x0E59C0
     for layer in range(const.npc_layer_count):
       i = offset + (layer*2)
-      start = int.from_bytes(ROM_en[i:i+2],'little') + offset
-      next = int.from_bytes(ROM_en[i+2:i+4],'little') + offset
+      start = indirect(ROM_en, i) + offset  # int.from_bytes(ROM_en[i:i+2],'little') + offset
+      next = indirect(ROM_en, i+2) + offset  # int.from_bytes(ROM_en[i+2:i+4],'little') + offset
       npcs = (next - start) // 7
       for npc in range(npcs):
         address = start + (npc*7)
@@ -210,6 +210,7 @@ class FF5Reader(QMainWindow):
     worldmap_tiles = make_world_map_tiles(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
     worldmap_tiles += make_world_map_tiles(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)
     worldmap_tiles += make_world_map_tiles(ROM_jp, 0x1BC000, 0x0FFBC0, 0x0FFEC0, length=128)
+    fieldmap_tiles = [make_field_map_tileset(ROM_jp, i) for i in range(64)]
     self.battle_strips = make_character_battle_sprites(ROM_en)
     status_strips = make_character_status_sprites(ROM_en)
     enemy_sprites = make_enemy_sprites(ROM_en)
@@ -241,6 +242,7 @@ class FF5Reader(QMainWindow):
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, scale=2), 'Glyphs (Large JP)')
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, scale=2),    'Glyphs (Kanji)')
     sprites_tab.addTab(make_pixmap_table(worldmap_tiles, cols=16, scale=4), 'Worldmap Tiles')
+    sprites_tab.addTab(make_pixmap_table(fieldmap_tiles, cols=8, scale=2), 'Fieldmap Tiles')
     sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22, scale=2), 'Character Battle Sprites')
     sprites_tab.addTab(make_pixmap_table(status_strips, cols=22, scale=2), 'Status Sprites')
     #sprites_tab.addTab(make_pixmap_table(enemy_sprites, scale=1), 'Enemy Sprites')
@@ -373,6 +375,41 @@ def make_world_map_tiles(rom, tiles_address, lut_address, palette_address, lengt
     palette = palettes[rom[lut_address+i]//16]
     tiles.append(create_tile_mode7_compressed(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
   return tiles
+
+def make_field_map_tiles(rom, id):
+  '''
+  This is a bit of a mess of pointer chains for now, so generalising it will have to wait.
+  Palette selection is probably determined by the tilemap which is outside the scope of this, so we'll just use #1.
+  '''
+  i2 = indirect(rom, 0x0E2400 + id*2)
+  i3 = indirect(rom, 0x0E2402 + i2)*2
+  i4 = indirect(rom, 0x18E080 + i3)
+  i5 = indirect(rom, 0x18E081 + i4+4)*3
+  i6 = indirect(rom, 0x083320 + i5)
+  i7 = indirect(rom, 0x080001 + i6) & 0x03FF
+  i8 = i7 * 0x1A
+
+  tile_index = (indirect(rom, 0x0E9C09 + i8)&0x3F)*4
+  tile_offset = indirect(rom, 0x1C2D84 + tile_index) + 0x2E24
+  tile_bank = indirect(rom, 0x1C2D86 + tile_index) + 0x1C
+  tiles_address = tile_bank*0x10000 + tile_offset
+  pal_offset = indirect(rom, 0x0E9C16 + i8) * 0x100
+  palette_address = 0x03BB00 + pal_offset
+  print(pal_offset, palette_address)
+  palettes = [generate_palette(rom, palette_address+i*32, transparent=True) for i in range(8)]
+
+  tiles = []
+  for i in range(256):
+    palette = palettes[1]
+    tiles.append(create_tile(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
+  return tiles
+
+def make_field_map_tileset(rom, id):
+  tiles = make_field_map_tiles(rom, id)
+  canvas = Canvas(16, 16)
+  for i, tile in enumerate(tiles):
+    canvas.draw_pixmap(i%16, i//16, tile)
+  return canvas.pixmap()
 
 def make_battle_strip(rom, palette_address, tile_address, num_tiles, bpp=4):
   if isinstance(palette_address, int):
@@ -766,6 +803,9 @@ def hex(num, digits):
   # Consolidate formatting for consistency
   #return '{:0{}X}₁₆'.format(num, digits)
   return HEX_PREFIX + '{:0{}X}'.format(num, digits)
+
+def indirect(rom, start, length=2):
+  return int.from_bytes(rom[start:start+length], 'little')
 
 
 def main():
