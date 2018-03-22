@@ -26,9 +26,13 @@ if pyqt_version == 0:
         raise
 
 
-def create_tile(data, palette):
+bg_color = QColor(0, 0, 128)
+bg_trans = QColor(0, 0, 0, 0)
+
+def create_tile_indexed(data):
   '''
-  Creates a QPixmap of a SNES tile. DO NOT USE OUTSIDE OF QApplication CONTEXT
+  Creates a QImage of a SNES tile. Useful for assigning palettes later.
+  DO NOT USE OUTSIDE OF QApplication CONTEXT
   '''
   planes = len(data)//8
   tile = array('B', range(64))
@@ -38,11 +42,9 @@ def create_tile(data, palette):
   if planes == 0:
     raise ValueError("Empty bytes passed")
   if planes == 1:
-    img.setColorTable([0x00000080, 0xFFFFFFFF])
     for i, (j, x) in enumerate([(j,x) for j in range(8) for x in reversed(range(8))]):
       tile[i] = (data[j] >> x & 1)
   else:
-    img.setColorTable(palette)
     for i, (j, x) in enumerate([(j,x) for j in range(0, 16, 2) for x in reversed(range(8))]):
       tile[i] = (data[j] >> x & 1) | ((data[j+1] >> x & 1) << 1)
     if planes == 3:
@@ -56,6 +58,14 @@ def create_tile(data, palette):
         tile[i] |= ((data[j] >> x & 1) << 4) | ((data[j+1] >> x & 1) << 5) \
             | ((data[j+16] >> x & 1) << 6) | ((data[j+17] >> x & 1) << 7)
   imgbits[:64] = tile
+  return img
+
+def create_tile(data, palette=[0x00000080, 0xFFFFFFFF]):
+  '''
+  Creates a QPixmap of a SNES tile. DO NOT USE OUTSIDE OF QApplication CONTEXT
+  '''
+  img = create_tile_indexed(data)
+  img.setColorTable(palette)
   return QPixmap.fromImage(img)
 
 def create_tile_mode7(data, palette):
@@ -175,3 +185,58 @@ def generate_palette(rom, offset, length=32, transparent=False):
   if transparent:
     palette[0] = 0
   return palette
+
+
+class Canvas:
+  def __init__(self, cols, rows, color=bg_trans):
+    self.image = QImage(8*cols, 8*rows, QImage.Format_ARGB32_Premultiplied)
+    self.image.fill(color)
+    self.painter = QtGui.QPainter(self.image)
+    self.max_x = 1
+    self.max_y = 1
+
+  def __del__(self):
+    del self.painter
+
+  def draw_pixmap(self, col, row, pixmap):
+    self.painter.drawPixmap(col*8, row*8, pixmap)
+    if col > self.max_x:
+      self.max_x = col
+    if row > self.max_y:
+      self.max_y = row
+
+  def pixmap(self, trim=False):
+    if trim:
+      return QPixmap.fromImage(self.image.copy(0, 0, self.max_x*8+8, self.max_y*8+8))
+    return QPixmap.fromImage(self.image)
+
+
+class Canvas_Indexed:
+  def __init__(self, cols, rows, color=0):
+    self.image = QImage(8*cols, 8*rows, QImage.Format_Indexed8)
+    self.width = 8*cols
+    self.image.fill(0)
+    self.imgbits = self.image.bits()
+    self.imgbits.setsize(self.image.byteCount())
+    self.max_col = 1
+    self.max_row = 1
+
+  def draw_tile(self, col, row, image):
+    imgbits = image.bits()
+    imgbits.setsize(image.byteCount())
+    x = col*8
+    y = row*8
+    start = x + y*self.width
+    for i in range(8):
+      offset = i*self.width
+      self.imgbits[start+offset:start+offset+8] = imgbits[i*8:i*8+8]
+    self.max_col = max(col, self.max_col)
+    self.max_row = max(row, self.max_row)
+
+  def pixmap(self, palette, trim=False):
+    if trim:
+      img = self.image.copy(0, 0, self.max_col*8+8, self.max_row*8+8)
+      img.setColorTable(palette)
+      return QPixmap.fromImage(img)
+    self.image.setColorTable(palette)
+    return QPixmap.fromImage(self.image)
