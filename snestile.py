@@ -60,6 +60,23 @@ def create_tile_indexed(data):
   imgbits[:64] = tile
   return img
 
+def create_tile_mode7_indexed(data):
+  # Each byte is a pixel. 8bit palette.
+  tile = array('B', range(64))
+  tile = data[:64]
+  img = QImage(8, 8, QImage.Format_Indexed8)
+  imgbits = img.bits()
+  imgbits.setsize(img.byteCount())
+  imgbits[:64] = tile
+  return img
+
+def create_tile_mode7_compressed_indexed(data, pal_index):
+  # Each byte is two pixels i.e. 0xEF is Mode 7 0xF 0xE
+  # Palette is externally determined by LUT, to be padded to the first hex digit
+  pal = pal_index << 4
+  newdata = b''.join([bytes([pal|(j%16), pal|(j//16)]) for j in data])
+  return create_tile_mode7_indexed(newdata)
+
 def create_tile(data, palette=[0x00000080, 0xFFFFFFFF]):
   '''
   Creates a QPixmap of a SNES tile. DO NOT USE OUTSIDE OF QApplication CONTEXT
@@ -70,13 +87,8 @@ def create_tile(data, palette=[0x00000080, 0xFFFFFFFF]):
 
 def create_tile_mode7(data, palette):
   # Each byte is a pixel. 8bit palette.
-  tile = array('B', range(64))
-  tile = data[:64]
-  img = QImage(8, 8, QImage.Format_Indexed8)
+  img = create_tile_mode7_indexed(data)
   img.setColorTable(palette)
-  imgbits = img.bits()
-  imgbits.setsize(img.byteCount())
-  imgbits[:64] = tile
   return QPixmap.fromImage(img)
 
 def create_tile_mode7_compressed(data, palette):
@@ -212,9 +224,10 @@ class Canvas:
 
 
 class Canvas_Indexed:
-  def __init__(self, cols, rows, color=0):
-    self.image = QImage(8*cols, 8*rows, QImage.Format_Indexed8)
-    self.width = 8*cols
+  def __init__(self, cols, rows, color=0, tilesize=8):
+    self.image = QImage(tilesize*cols, tilesize*rows, QImage.Format_Indexed8)
+    self.width = tilesize*cols
+    self.tilesize = tilesize
     self.image.fill(0)
     self.imgbits = self.image.bits()
     self.imgbits.setsize(self.image.byteCount())
@@ -224,18 +237,18 @@ class Canvas_Indexed:
   def draw_tile(self, col, row, image):
     imgbits = image.bits()
     imgbits.setsize(image.byteCount())
-    x = col*8
-    y = row*8
+    x = col*self.tilesize
+    y = row*self.tilesize
     start = x + y*self.width
-    for i in range(8):
+    for i in range(self.tilesize):
       offset = i*self.width
-      self.imgbits[start+offset:start+offset+8] = imgbits[i*8:i*8+8]
+      self.imgbits[start+offset:start+offset+self.tilesize] = imgbits[i*self.tilesize:(i+1)*self.tilesize]
     self.max_col = max(col, self.max_col)
     self.max_row = max(row, self.max_row)
 
   def pixmap(self, palette, trim=False):
     if trim:
-      img = self.image.copy(0, 0, self.max_col*8+8, self.max_row*8+8)
+      img = self.image.copy(0, 0, (self.max_col+1)*self.tilesize, (self.max_row+1)*self.tilesize)
       img.setColorTable(palette)
       return QPixmap.fromImage(img)
     self.image.setColorTable(palette)

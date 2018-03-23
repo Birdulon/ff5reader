@@ -8,7 +8,7 @@ import os
 from struct import unpack
 from itertools import chain
 from array import array
-from snestile import generate_glyphs, generate_glyphs_large, generate_palette, create_tile, create_tile_indexed, create_tile_mode7_compressed
+from snestile import generate_glyphs, generate_glyphs_large, generate_palette, create_tile, create_tile_indexed, create_tile_mode7_compressed, create_tile_mode7_compressed_indexed
 from snestile import Canvas, Canvas_Indexed
 from snestile import bg_color, bg_trans
 import const
@@ -209,9 +209,16 @@ class FF5Reader(QMainWindow):
     perfcount()
     print('Generating map tiles')
 
-    worldmap_tiles = make_world_map_tiles(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
-    worldmap_tiles += make_world_map_tiles(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)
-    worldmap_tiles += make_world_map_tiles(ROM_jp, 0x1BC000, 0x0FFBC0, 0x0FFEC0, length=128)
+    world_tiles = [make_worldmap_tiles(ROM_jp, 0x0FF0C0+(i*0x300), 0x1B8000+(i*0x2000), 0x0FF9C0+(i*0x100), length=l) for i, l in enumerate([256, 256, 256])]
+    worldpixmaps = [make_worldmap_pixmap(ROM_jp, 0, 0x0FFCC0+(0*0x100), world_tiles[0]),
+                    make_worldmap_pixmap(ROM_jp, 1, 0x0FFCC0+(1*0x100), world_tiles[1]),
+                    make_worldmap_pixmap(ROM_jp, 2, 0x0FFCC0+(0*0x100), world_tiles[0]),
+                    make_worldmap_pixmap(ROM_jp, 3, 0x0FFCC0+(2*0x100), world_tiles[2]),
+                    make_worldmap_pixmap(ROM_jp, 4, 0x0FFCC0+(2*0x100), world_tiles[2])]
+
+    worldmap_tiles = make_worldmap_subtiles_pixmap(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
+    worldmap_tiles += make_worldmap_subtiles_pixmap(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)
+    worldmap_tiles += make_worldmap_subtiles_pixmap(ROM_jp, 0x1BC000, 0x0FFBC0, 0x0FFEC0, length=128)
     perfcount()
     field_tiles = make_all_field_tiles(ROM_jp)
     field_minitiles = make_all_field_minitiles(ROM_jp)
@@ -257,6 +264,7 @@ class FF5Reader(QMainWindow):
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, scale=2), 'Glyphs (Large JP)')
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, scale=2),    'Glyphs (Kanji)')
     sprites_tab.addTab(make_pixmap_table(worldmap_tiles, cols=16, scale=4), 'Worldmap Tiles')
+    sprites_tab.addTab(make_pixmap_table(worldpixmaps, cols=1, scale=1, large=True), 'Worldmaps')
     sprites_tab.addTab(make_pixmap_table(fieldmap_tiles, cols=8, scale=2), 'Fieldmap Tiles')
     sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22, scale=2), 'Character Battle Sprites')
     sprites_tab.addTab(make_pixmap_table(status_strips, cols=22, scale=2), 'Status Sprites')
@@ -361,13 +369,71 @@ def make_enemy_sprites(rom):
   return sprites
 
 
-def make_world_map_tiles(rom, tiles_address, lut_address, palette_address, length=0x100):
+def make_worldmap_subtiles(rom, tiles_address, lut_address, length=0x100):
+  subtiles = []
+  for i in range(length):
+    pal_index = rom[lut_address+i]//16
+    subtiles.append(create_tile_mode7_compressed_indexed(rom[tiles_address+i*32:tiles_address+i*32+32], pal_index))
+  return subtiles
+
+def stitch_worldmap_tiles(rom, subtiles, offset=0x0FF0C0):
+  tiles = []
+  for i in range(0xC0):
+    canvas = Canvas_Indexed(2, 2)
+    for j in range(4):
+      k = indirect(rom, offset+(j*0xC0)+i, length=1)
+      canvas.draw_tile(j%2, j//2, subtiles[k])
+    tiles.append(canvas.image)
+  return tiles
+
+def make_worldmap_tiles(rom, tiles_address, subtiles_address, lut_address, length=0x100):
+  return stitch_worldmap_tiles(rom, make_worldmap_subtiles(rom, subtiles_address, lut_address, length=length), tiles_address)
+
+def make_worldmap_subtiles_pixmap(rom, tiles_address, lut_address, palette_address, length=0x100):
   tiles = []
   palettes = [generate_palette(rom, palette_address+i*32, transparent=True) for i in range(16)]
   for i in range(length):
     palette = palettes[rom[lut_address+i]//16]
     tiles.append(create_tile_mode7_compressed(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
   return tiles
+
+def make_worldmap_chunk(rom, id, length=256):
+  i = indirect(rom, 0x0FE000+(id*2)) + 0x070000
+  if id > 0x433:
+    i += 0x010000
+  mountains = [0x0C, 0x1C, 0x2C]
+  chunk = []
+  while len(chunk) < length:
+    j = indirect(rom, i, 1)
+    if j >= 0xC0:
+      k = j-0xBF
+      i += 1
+      j = indirect(rom, i, 1)
+      chunk += [j]*k
+    elif j in mountains:
+      chunk += [j, j+1, j+2]
+    else:
+      chunk.append(j)
+    i += 1
+  return chunk
+
+def make_worldmap_chunk_pixmap(rom, id, palette_address, tiles):
+  chunk = make_worldmap_chunk(rom, id)
+  palette = generate_palette(rom, palette_address, length=0x320, transparent=True)
+  canvas = Canvas_Indexed(len(chunk), 1, tilesize=16)
+  for i, c in enumerate(chunk):
+    canvas.draw_tile(i, 0, tiles[c])
+  return canvas.pixmap(palette)
+
+def make_worldmap_pixmap(rom, map_id, palette_address, tiles):
+  id_offset = map_id*256
+  palette = generate_palette(rom, palette_address, length=0x320, transparent=True)
+  canvas = Canvas_Indexed(256, 256, tilesize=16)
+  for j in range(256):
+    chunk = make_worldmap_chunk(rom, j+id_offset)
+    for i, c in enumerate(chunk):
+      canvas.draw_tile(i, j, tiles[c])
+  return canvas.pixmap(palette)
 
 def make_field_tiles(rom, id):
   tiles_address = indirect(rom, 0x1C2D84 + id*4, length=4) + 0x1C2E24
@@ -432,6 +498,22 @@ def make_battle_strip(rom, palette_address, tile_address, num_tiles, bpp=4):
     offset = tile_address+(j*b)
     battle_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+b], palette))
   return battle_strip.pixmap()
+
+def get_zone_tiles_start(rom, id):
+  i1 = indirect(rom, 0x0E59C0+(id*2))+7
+  i2 = indirect(rom, 0x0E59C2+i1, 1)
+  # There is a divergent path here based on the value. Other things appear to be affected by this.
+  if i2 > 0x67:
+    i3 = ((i2 - 0x67) << 11) + 0x1A0000
+  elif i2 > 0x52:
+    i3 = ((i2 - 0x52) << 9) + 0x1A0000
+  elif i2 > 0x4B:
+    i3 = ((i2 - 0x4B) << 11) + 0x1AC800
+  elif i2 > 0x32:
+    i3 = ((i2 - 0x32) << 10) + 0x1A0000
+  else:
+    i3 = (i2 << 9) + 0x1A0000
+  return i3
 
 
 def make_character_battle_sprites_ff4(rom):
@@ -761,11 +843,14 @@ def make_table(headers, items, sortable=False, row_labels=True, scale=2):
   return table
 
 
-def make_pixmap_table(items, cols=16, scale=4):
+def make_pixmap_table(items, cols=16, scale=4, large=False):
   rows = divceil(len(items), cols)
   rd = hex_length(rows-1)+1
   cd = hex_length(cols-1)
   table = QTableWidget(rows, cols)
+  if large:
+    table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
+    table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
   table.setVerticalHeaderLabels([hex(v*cols, rd) for v in range(rows)])
   table.setHorizontalHeaderLabels([hex(v, cd) for v in range(cols)])
   for i, item in enumerate(items):
