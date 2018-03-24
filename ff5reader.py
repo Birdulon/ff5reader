@@ -170,11 +170,18 @@ class FF5Reader(QMainWindow):
                       (hex(24, 2),       1, None),
                       ('Music',          1, const.BGM_Tracks)]
     zone_headers = ['Address'] + [z[0] for z in zone_structure]
+    zone_data = [parse_struct(ROM_en, 0x0E9C00 + (i*0x1A), zone_structure) for i in range(const.zone_count)]
 
-    zone_data = []
-    for i in range(const.zone_count):
-        offset = 0x0E9C00 + (i*0x1A)
-        zone_data.append(parse_struct(ROM_en, offset, zone_structure))
+    battle_bg_structure = [('ImageID',       1, None),
+                           ('ColorID 1',     1, None),
+                           ('ColorID 2',     1, None),
+                           ('TerrainID',     1, None),
+                           ('TerrainFlipID', 1, None),
+                           (hex(5, 1),       1, None),
+                           ('Movement',      1, None),
+                           (hex(7, 1),       1, None),]
+    battle_bg_headers = ['Address'] + [z[0] for z in battle_bg_structure]
+    battle_bg_data = [parse_struct(ROM_jp, 0x14BA21 + (i*8), battle_bg_structure) for i in range(34)]
 
     tileset_headers = ("ID", "Offset", "Pointer", "Expected Length")
     tileset_data = []
@@ -209,16 +216,21 @@ class FF5Reader(QMainWindow):
     perfcount()
     print('Generating map tiles')
 
-    world_tiles = [make_worldmap_tiles(ROM_jp, 0x0FF0C0+(i*0x300), 0x1B8000+(i*0x2000), 0x0FF9C0+(i*0x100), length=l) for i, l in enumerate([256, 256, 256])]
-    worldpixmaps = [make_worldmap_pixmap(ROM_jp, 0, 0x0FFCC0+(0*0x100), world_tiles[0]),
-                    make_worldmap_pixmap(ROM_jp, 1, 0x0FFCC0+(1*0x100), world_tiles[1]),
-                    make_worldmap_pixmap(ROM_jp, 2, 0x0FFCC0+(0*0x100), world_tiles[0]),
-                    make_worldmap_pixmap(ROM_jp, 3, 0x0FFCC0+(2*0x100), world_tiles[2]),
-                    make_worldmap_pixmap(ROM_jp, 4, 0x0FFCC0+(2*0x100), world_tiles[2])]
+    worldmap_palettes = [generate_palette(ROM_jp, 0x0FFCC0+(i*0x100), length=0x160, transparent=True) for i in range(3)]
 
-    worldmap_tiles = make_worldmap_subtiles_pixmap(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
-    worldmap_tiles += make_worldmap_subtiles_pixmap(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)
-    worldmap_tiles += make_worldmap_subtiles_pixmap(ROM_jp, 0x1BC000, 0x0FFBC0, 0x0FFEC0, length=128)
+    world_tiles = [make_worldmap_tiles(ROM_jp, 0x0FF0C0+(i*0x300), 0x1B8000+(i*0x2000), 0x0FF9C0+(i*0x100)) for i in range(3)]
+    worldpixmaps = [make_worldmap_pixmap(ROM_jp, i, 0x0FFCC0+(t*0x100), world_tiles[t]) for i, t in enumerate([0, 1, 0, 2, 2])]
+    world_tiles_pixmaps = []
+    for i, tiles in enumerate(world_tiles):
+      a = []
+      for t in tiles:
+        t.setColorTable(worldmap_palettes[i])
+        a.append(QPixmap.fromImage(t))
+      world_tiles_pixmaps.append(a)
+    perfcount()
+    worldmap_subtiles = make_worldmap_subtiles_pixmap(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
+    worldmap_subtiles += make_worldmap_subtiles_pixmap(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)
+    worldmap_subtiles += make_worldmap_subtiles_pixmap(ROM_jp, 0x1BC000, 0x0FFBC0, 0x0FFEC0, length=128)
     perfcount()
     field_tiles = make_all_field_tiles(ROM_jp)
     field_minitiles = make_all_field_minitiles(ROM_jp)
@@ -227,6 +239,9 @@ class FF5Reader(QMainWindow):
     st_field_minitiles = [stitch_tileset(ts) for ts in field_minitiles]
     perfcount()
     fieldmap_tiles = [make_field_map_tile_pixmap(ROM_jp, i, st_field_tiles, st_field_minitiles) for i in range(const.zone_count)]
+    perfcount()
+    print('Generating Battle backgrounds')
+    battle_bgs = make_battle_backgrounds(ROM_jp)
     perfcount()
     print('Generating other sprites')
     self.battle_strips = make_character_battle_sprites(ROM_en)
@@ -263,9 +278,13 @@ class FF5Reader(QMainWindow):
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_small, scale=4), 'Glyphs (JP)')
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, scale=2), 'Glyphs (Large JP)')
     sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, scale=2),    'Glyphs (Kanji)')
-    sprites_tab.addTab(make_pixmap_table(worldmap_tiles, cols=16, scale=4), 'Worldmap Tiles')
+    sprites_tab.addTab(make_pixmap_table(worldmap_subtiles, cols=16, scale=4), 'Worldmap Subtiles')
+    sprites_tab.addTab(make_pixmap_table(world_tiles_pixmaps[0], cols=16, scale=4), 'World 1 Tiles')
+    sprites_tab.addTab(make_pixmap_table(world_tiles_pixmaps[1], cols=16, scale=4), 'World 2 Tiles')
+    sprites_tab.addTab(make_pixmap_table(world_tiles_pixmaps[2], cols=16, scale=4), 'Underwater Tiles')
     sprites_tab.addTab(make_pixmap_table(worldpixmaps, cols=1, scale=1, large=True), 'Worldmaps')
     sprites_tab.addTab(make_pixmap_table(fieldmap_tiles, cols=8, scale=2), 'Fieldmap Tiles')
+    sprites_tab.addTab(make_pixmap_table(battle_bgs, cols=8, scale=2), 'Battle BGs')
     sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22, scale=2), 'Character Battle Sprites')
     sprites_tab.addTab(make_pixmap_table(status_strips, cols=22, scale=2), 'Status Sprites')
     sprites_tab.addTab(make_pixmap_table(enemy_sprites_named, cols=32, scale=1), 'Enemy Sprites')
@@ -279,6 +298,7 @@ class FF5Reader(QMainWindow):
 
     structs_tab.addTab(make_table(zone_headers, zone_data, True), 'Zones')
     structs_tab.addTab(make_table(tileset_headers, tileset_data, True), 'Tilesets')
+    structs_tab.addTab(make_table(battle_bg_headers, battle_bg_data, True), 'BattleBGs')
     structs_tab.addTab(make_table(const.npc_layer_headers, npc_layers, True), 'NPC Layers')
     structs_tab.addTab(make_table(enemy_sprite_headers, enemy_sprite_data, True), 'Enemy Sprites')
 
@@ -486,6 +506,166 @@ def make_field_map_tile_pixmap(rom, id, st_tiles, st_minitiles):
     canvas.draw_pixmap(0, i*16, st_tiles[ts].pixmap(p))
   canvas.draw_pixmap(0, 48, st_minitiles[minitile].pixmap(p))
   return canvas.pixmap()
+
+def decompress_lzss(rom, start, header=False):
+  '''
+  Algorithm from http://slickproductions.org/slickwiki/index.php/Noisecross:Final_Fantasy_V_Compression
+  '''
+  uncompressed_length = indirect(rom, start)
+  ptr = start+2
+  output = []
+  buffer = [0 for i in range(0x800)]
+  buffer_p = 0x07DE
+  while len(output) < uncompressed_length:
+    bitmap_byte = rom[ptr]
+    ptr += 1
+    for i in range(8):
+      bit = (bitmap_byte >> i) & 1
+      if bit:
+        b = rom[ptr]
+        ptr += 1
+        output.append(b)
+        buffer[buffer_p] = b
+        buffer_p = (buffer_p+1) % 0x800
+      else:
+        b1 = rom[ptr]
+        b2 = rom[ptr+1]
+        ptr += 2
+        offset = b1|((b2 & 0xE0)<<3)
+        length = b2 & 0x1F
+        for j in range(length+3):
+          b = buffer[offset]
+          output.append(b)
+          buffer[buffer_p] = b
+          buffer_p = (buffer_p+1) % 0x800
+          offset = (offset+1) % 0x800
+  return bytes(output[:uncompressed_length])
+
+def decompress_battle_terrain(rom, address):
+  '''
+  Decompresses the tilemap for a battle background.
+  '''
+  length = 0x500
+  output = [0 for i in range(length)]
+  o1 = []
+  ptr = address
+  while len(o1) < length//2:
+    a = rom[ptr]
+    ptr += 1
+    if a != 0xFF:
+      o1.append(a)
+    else:
+      repeat = rom[ptr]
+      ptr += 1
+      if repeat & 0x80:  # Repeat 2 tiles
+        repeat &= 0x3F
+        a, b = rom[ptr:ptr+2]
+        ptr += 2
+        o1 += [a, b]*repeat
+      else:
+        if repeat & 0x40:
+          pass  # TODO: trace this out
+        else:  # Incremental repeat
+          repeat &= 0x3F
+          a,inc = rom[ptr:ptr+2]
+          ptr += 2
+          o1 += [a+(i*inc) for i in range(repeat)]
+  o2 = [4*(1+(i>>7)) for i in o1]
+  output[::2] =  [i|0x80 for i in o1[:length//2]]
+  output[1::2] = [i&0xDF for i in o2[:length//2]]
+  return bytes(output)
+
+def apply_battle_terrain_flips(rom, id, battle_terrain):
+  if id==0xFF:
+    return battle_terrain
+  ptr = indirect(rom, 0x14C736+(id*2))+0x140000
+  length = len(battle_terrain)//2
+  output = list(battle_terrain)
+  buffer = []
+
+  while len(buffer) < length:
+    a = rom[ptr]
+    ptr += 1
+    if a == 0x00:
+      skip = rom[ptr]
+      ptr += 1
+      buffer += [0]*skip*4
+    else:
+      for b in reversed(range(0, 8, 2)):
+        buffer.append((a>>b)&0x03)
+
+  for i in range(len(battle_terrain)//2):
+    output[i*2+1] |= (buffer[i] << 6)
+  return bytes(output)
+
+def make_tilemap_pixmap(tilemap, tiles, palettes, tile_adjust=0):
+  '''
+  Battle bg is 64x64 map size, 8x8 tile size
+  4bpp tiles
+  '''
+  canvas = Canvas(64, 64)
+  for i in range(len(tilemap)//2):
+    a, b = tilemap[i*2:(i+1)*2]
+    tile_index = a|((b & 0x02) << 8)
+    p = (b & 0x1C) >> 2
+    priority = (b & 0x20) >> 5
+    h_flip = (b & 0x40) >> 6
+    v_flip = (b & 0x80) >> 7
+
+    x = (i % 32) + 32*((i//1024) % 2)
+    y = (i //32) - 32*((i//1024) % 2)
+    try:
+      palette = palettes[p]
+      tile = tiles[(tile_index+tile_adjust)%0x80]
+      tile.setColorTable(palette)
+      tile_px = QPixmap.fromImage(tile)
+      canvas.draw_pixmap(x, y, tile_px, h_flip, v_flip)
+    except BaseException as e:
+      print(e, p, hex(tile_index,2), hex(tile_adjust,2), hex(tile_index+tile_adjust,2))
+  return canvas.pixmap(True)
+
+def make_battle_backgrounds(rom):
+  '''
+  21 pointers in memory for the compressed data of the tilesets.
+  Most of these are not unique, and only a subset of the resulting block is used.
+  The block appears to get DMA'd to 0x0400 in VRAM
+
+  Terrain gets DMA'd to 0x2000 (size 0x500) in VRAM from 0x7f0000 in RAM
+  '''
+  palettes = [generate_palette(rom, 0x14BB31+(i*0x20)) for i in range(84)]
+  battle_bgs = []
+  for i in range(34):
+    bg = {
+      'tiles_id':         rom[0x14BA21+(i*8)],
+      'pal1_id':          rom[0x14BA22+(i*8)],
+      'pal2_id':          rom[0x14BA23+(i*8)],
+      'terrain_id':       rom[0x14BA24+(i*8)],
+      'terrain_flips_id': rom[0x14BA25+(i*8)],
+      }
+    bg['palette'] = [palettes[0], palettes[bg['pal1_id']], palettes[bg['pal2_id']]]
+    battle_bgs.append(bg)
+
+  tiles_pointer_start = 0x184196
+  tiles_RAM_pointer_start = 0x184157
+  tiles_pointers = [indirect(rom, tiles_pointer_start+(i*3), length=3)-0xC00000 for i in range(21)]
+  tiles_raw = [decompress_lzss(rom, p) for p in tiles_pointers]
+  tiles_skips = [indirect(rom, tiles_RAM_pointer_start+(i*3), length=3)-0x7FC000 for i in range(21)]
+  tiles = []
+  for raw, skip in zip(tiles_raw, tiles_skips):
+    r = raw[skip:]
+    tiles.append([create_tile_indexed(r[i*32:(i+1)*32]) for i in range(len(r)//32)])
+
+  terrain_pointer_start = 0x14C86D
+  terrain_pointers = [indirect(rom, terrain_pointer_start+(i*2))+0x140000 for i in range(28)]
+  terrains = [decompress_battle_terrain(rom, p) for p in terrain_pointers]
+
+  pixmaps = []
+  for bg in battle_bgs:
+    terrain = apply_battle_terrain_flips(rom, bg['terrain_flips_id'], terrains[bg['terrain_id']])
+    pixmaps.append(make_tilemap_pixmap(terrain, tiles[bg['tiles_id']], bg['palette']))
+  #[make_tilemap_pixmap(terrains[5], tiles[2], palettes)]
+  return pixmaps
+
 
 def make_battle_strip(rom, palette_address, tile_address, num_tiles, bpp=4):
   if isinstance(palette_address, int):

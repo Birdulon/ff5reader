@@ -210,8 +210,16 @@ class Canvas:
   def __del__(self):
     del self.painter
 
-  def draw_pixmap(self, col, row, pixmap):
-    self.painter.drawPixmap(col*8, row*8, pixmap)
+  def draw_pixmap(self, col, row, pixmap, h_flip=False, v_flip=False):
+    if h_flip or v_flip:
+      return
+    h_s = -1 if h_flip else 1
+    v_s = -1 if v_flip else 1
+    x = (col+h_flip)*8*h_s
+    y = (row+v_flip)*8*v_s
+    self.painter.scale(h_s, v_s)
+    self.painter.drawPixmap(x, y, pixmap)
+    self.painter.scale(h_s, v_s)  # Invert it again to restore it to normal
     if col > self.max_x:
       self.max_x = col
     if row > self.max_y:
