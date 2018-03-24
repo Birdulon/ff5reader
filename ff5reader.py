@@ -284,7 +284,7 @@ class FF5Reader(QMainWindow):
     sprites_tab.addTab(make_pixmap_table(world_tiles_pixmaps[2], cols=16, scale=4), 'Underwater Tiles')
     sprites_tab.addTab(make_pixmap_table(worldpixmaps, cols=1, scale=1, large=True), 'Worldmaps')
     sprites_tab.addTab(make_pixmap_table(fieldmap_tiles, cols=8, scale=2), 'Fieldmap Tiles')
-    sprites_tab.addTab(make_pixmap_table(battle_bgs, cols=8, scale=2), 'Battle BGs')
+    sprites_tab.addTab(make_pixmap_table(battle_bgs, cols=8, scale=1), 'Battle BGs')
     sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22, scale=2), 'Character Battle Sprites')
     sprites_tab.addTab(make_pixmap_table(status_strips, cols=22, scale=2), 'Status Sprites')
     sprites_tab.addTab(make_pixmap_table(enemy_sprites_named, cols=32, scale=1), 'Enemy Sprites')
@@ -562,14 +562,13 @@ def decompress_battle_terrain(rom, address):
         a, b = rom[ptr:ptr+2]
         ptr += 2
         o1 += [a, b]*repeat
-      else:
-        if repeat & 0x40:
-          pass  # TODO: trace this out
-        else:  # Incremental repeat
-          repeat &= 0x3F
-          a,inc = rom[ptr:ptr+2]
-          ptr += 2
-          o1 += [a+(i*inc) for i in range(repeat)]
+      else:  # Incremental repeat
+        a, inc = rom[ptr:ptr+2]
+        ptr += 2
+        if repeat & 0x40:  # Negative increment
+          inc = -inc
+        repeat &= 0x3F
+        o1 += [a+(i*inc) for i in range(repeat)]
   o2 = [4*(1+(i>>7)) for i in o1]
   output[::2] =  [i|0x80 for i in o1[:length//2]]
   output[1::2] = [i&0xDF for i in o2[:length//2]]
