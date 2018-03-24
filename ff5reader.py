@@ -589,10 +589,10 @@ def apply_battle_terrain_flips(rom, id, battle_terrain):
     if a == 0x00:
       skip = rom[ptr]
       ptr += 1
-      buffer += [0]*skip*4
+      buffer += [0]*skip*8
     else:
-      for b in reversed(range(0, 8, 2)):
-        buffer.append((a>>b)&0x03)
+      for b in reversed(range(0, 8, 1)):
+        buffer.append((a>>b)&0x01)
 
   for i in range(len(battle_terrain)//2):
     output[i*2+1] |= (buffer[i] << 6)

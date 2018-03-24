@@ -211,8 +211,6 @@ class Canvas:
     del self.painter
 
   def draw_pixmap(self, col, row, pixmap, h_flip=False, v_flip=False):
-    if h_flip or v_flip:
-      return
     h_s = -1 if h_flip else 1
     v_s = -1 if v_flip else 1
     x = (col+h_flip)*8*h_s
