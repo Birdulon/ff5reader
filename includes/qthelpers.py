@@ -82,6 +82,31 @@ if not monofont.fixedPitch():
     monofont.setFamily('Monospace')
 
 
+class Label(QLabel):
+  def __init__(self, *kwargs):
+    super().__init__(*kwargs)
+    self.pixmaps = []
+    self.pixmap_index = 0
+    self.timer = QtCore.QTimer()
+    self.timer.timeout.connect(self._cycle_pixmap)
+
+  def setContent(self, content, scale=1, strip=True):
+    if isinstance(content, QPixmap):
+      self.setPixmap(content.scaled(content.size() * scale))
+    elif isinstance(content, list) and isinstance(content[0], QPixmap):
+      self.pixmaps = [c.scaled(c.size() * scale) for c in content[:-1]]
+      self.setPixmap(self.pixmaps[0])
+      self.timer.start(content[-1]*1000/60)
+    else:
+      if strip:
+        content = content.strip()
+      self.setText(content)
+
+  def _cycle_pixmap(self):
+    self.pixmap_index = (self.pixmap_index+1)%len(self.pixmaps)
+    self.setPixmap(self.pixmaps[self.pixmap_index])
+
+
 def table_size_to_contents(table):
     # Stupid hack to get table to size correctly
     table.hide()
@@ -144,9 +169,9 @@ def make_pixmap_table(items, cols=16, scale=4, large=False):
   for i, item in enumerate(items):
     if isinstance(item, QWidget):
       table.setCellWidget(i // cols, i % cols, item)
-    elif isinstance(item, QPixmap):
-      lab = QLabel()
-      lab.setPixmap(item.scaled(item.size() * scale))
+    else:
+      lab = Label()
+      lab.setContent(item, scale=scale)
       lab.setAlignment(QtCore.Qt.AlignCenter)
       table.setCellWidget(i // cols, i % cols, lab)
   table_size_to_contents(table)
@@ -161,11 +186,8 @@ def stack_labels(*items):
   l.setSpacing(0)
   l.setContentsMargins(0, 0, 0, 0)
   for item in items:
-    lab = QLabel()
-    if isinstance(item, QPixmap):
-      lab.setPixmap(item)
-    else:
-      lab.setText(item.strip())
+    lab = Label()
+    lab.setContent(item)
     lab.setAlignment(QtCore.Qt.AlignCenter)
     lab.setMargin(0)
     l.addWidget(lab)

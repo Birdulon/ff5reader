@@ -110,9 +110,6 @@ with open(filename_jp_ff6, 'rb') as file:
     ROM_FF6jp = file.read()
 print(len(ROM_FF6jp), filename_jp_ff6)
 
-stringlist_headers = ['Address', 'ID', 'Name']
-imglist_headers = stringlist_headers + ['Img', 'Name JP', 'Img JP']
-
 
 class FF5Reader(QMainWindow):
   '''
@@ -120,7 +117,6 @@ class FF5Reader(QMainWindow):
   '''
   def __init__(self):
     QMainWindow.__init__(self, None)
-    global glyph_sprites_en_large, glyph_sprites_en_small, glyph_sprites_jp_small, glyph_sprites_jp_large, glyph_sprites_kanji, glyph_sprites_jp_dialogue
     perfcount()
     print('Generating Glyphs')
     self.glyph_sprites = {
@@ -132,6 +128,9 @@ class FF5Reader(QMainWindow):
       }
     make_string_img_list = functools.partial(_make_string_img_list, **self.glyph_sprites)
     perfcount()
+
+    stringlist_headers = ['Address', 'ID', 'Name']
+    imglist_headers = stringlist_headers + ['Img', 'Name JP', 'Img JP']
 
     print('Generating Strings')
     zone_names = make_string_img_list(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200, indirect=True, large=True)
@@ -180,14 +179,14 @@ class FF5Reader(QMainWindow):
     zone_headers = ['Address'] + [z[0] for z in zone_structure]
     zone_data = [parse_struct(ROM_en, 0x0E9C00 + (i*0x1A), zone_structure) for i in range(const.zone_count)]
 
-    battle_bg_structure = [('ImageID',       1, None),
-                           ('ColorID 1',     1, None),
-                           ('ColorID 2',     1, None),
-                           ('TerrainID',     1, None),
-                           ('TerrainFlipID', 1, None),
-                           (hex(5, 1),       1, None),
-                           ('AnimationID',   1, None),
-                           ('PaletteCycleID',1, None),]
+    battle_bg_structure = [('Tileset',     1, None),
+                           ('Palette 1',   1, None),
+                           ('Palette 2',   1, None),
+                           ('Tilemap',     1, None),
+                           ('TilemapFlip', 1, None),
+                           (hex(5, 1),     1, None),
+                           ('Animation',   1, None),
+                           ('PaletteCycle',1, None),]
     battle_bg_headers = ['Address'] + [z[0] for z in battle_bg_structure]
     battle_bg_data = [parse_struct(ROM_jp, 0x14BA21 + (i*8), battle_bg_structure) for i in range(34)]
 
@@ -223,9 +222,7 @@ class FF5Reader(QMainWindow):
 
     perfcount()
     print('Generating map tiles')
-
     worldmap_palettes = [generate_palette(ROM_jp, 0x0FFCC0+(i*0x100), length=0x160, transparent=True) for i in range(3)]
-
     world_tiles = [make_worldmap_tiles(ROM_jp, 0x0FF0C0+(i*0x300), 0x1B8000+(i*0x2000), 0x0FF9C0+(i*0x100)) for i in range(3)]
     worldpixmaps = [make_worldmap_pixmap(ROM_jp, i, 0x0FFCC0+(t*0x100), world_tiles[t]) for i, t in enumerate([0, 1, 0, 2, 2])]
     world_tiles_pixmaps = []
@@ -267,6 +264,7 @@ class FF5Reader(QMainWindow):
     perfcount()
 
 
+    print('Creating Qt Widgets')
     self.gamewidget = QTabWidget()
     self.ff4widget = QTabWidget()
     self.ff5widget = QTabWidget()
@@ -311,8 +309,8 @@ class FF5Reader(QMainWindow):
     structs_tab.addTab(make_table(enemy_sprite_headers, enemy_sprite_data, True), 'Enemy Sprites')
 
     strings_tab.addTab(make_table(imglist_headers, items, row_labels=False), 'Items')
-    strings_tab.addTab(make_table(imglist_headers, magics, row_labels=False), 'Magics')
-    strings_tab.addTab(make_table(imglist_headers, more_magics, row_labels=False), 'More Magics')
+    strings_tab.addTab(make_table(imglist_headers, magics+more_magics, row_labels=False), 'Magics')
+    #strings_tab.addTab(make_table(imglist_headers, more_magics, row_labels=False), 'More Magics')
     strings_tab.addTab(make_table(imglist_headers, enemy_names, row_labels=False), 'Enemy Names')
     strings_tab.addTab(make_table(imglist_headers, character_names, row_labels=False), 'Character Names')
     strings_tab.addTab(make_table(imglist_headers, job_names, row_labels=False), 'Job Names')
@@ -336,6 +334,7 @@ class FF5Reader(QMainWindow):
     self.main_widget.setMinimumSize(800,600)
     self.setCentralWidget(self.main_widget)
     self.show()
+    perfcount()
 
   def _string_decode(self):
     string = ''.join(self.decoder_input.text().split())
@@ -349,7 +348,10 @@ class FF5Reader(QMainWindow):
     self.decoder_layout.addWidget(img)
     self.decoder_input.setText('')
 
-
+'''
+The painting logic here needs to be moved into includes.snestile at some point.
+Once that is done, these functions will be moved to includes.snes which should not have qt dependencies.
+'''
 def make_string_img_small(bytestring, glyphs, jp=False):
   '''
   JP version is not as fancy as this with dakuten, it just puts them on the row above and clips.

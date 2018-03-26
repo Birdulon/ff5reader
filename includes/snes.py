@@ -214,7 +214,7 @@ def make_field_map_tile_pixmap(rom, id, st_tiles, st_minitiles):
   canvas.draw_pixmap(0, 48, st_minitiles[minitile].pixmap(p))
   return canvas.pixmap()
 
-def decompress_battle_terrain(rom, address):
+def decompress_battle_tilemap(rom, address):
   '''
   Decompresses the tilemap for a battle background.
   Battle BGs use a type of RLE with 2byte repeat and 1byte incremental repeat.
@@ -248,7 +248,7 @@ def decompress_battle_terrain(rom, address):
   output[1::2] = [i&0xDF for i in o2[:length//2]]
   return bytes(output)
 
-def apply_battle_terrain_flips(rom, id, battle_terrain):
+def apply_battle_tilemap_flips(rom, id, battle_terrain):
   if id==0xFF:
     return battle_terrain
   ptr = indirect(rom, 0x14C736+(id*2))+0x140000
@@ -271,7 +271,30 @@ def apply_battle_terrain_flips(rom, id, battle_terrain):
     output[i*2+1] |= (buffer[i] << 6)
   return bytes(output)
 
-def make_tilemap_pixmap(tilemap, tiles, palettes, tile_adjust=0):
+def make_tilemap_canvas(tilemap, tiles, tile_adjust=0, pal_adjust=-1):
+  '''
+  Battle bg is 64x64 map size, 8x8 tile size
+  4bpp tiles
+  '''
+  canvas = Canvas_Indexed(64, 64)
+  for i in range(len(tilemap)//2):
+    a, b = tilemap[i*2:(i+1)*2]
+    tile_index = a|((b & 0x02) << 8)
+    p = (b & 0x1C) >> 2
+    priority = (b & 0x20) >> 5
+    h_flip = (b & 0x40) >> 6
+    v_flip = (b & 0x80) >> 7
+
+    x = (i % 32) + 32*((i//1024) % 2)
+    y = (i //32) - 32*((i//1024) % 2)
+    try:
+      tile = tiles[(tile_index+tile_adjust)%0x80]
+      canvas.draw_tile(x, y, tile, h_flip, v_flip, p+pal_adjust)
+    except BaseException as e:
+      print(e, p, hex(tile_index,2), hex(tile_adjust,2), hex(tile_index+tile_adjust,2))
+  return canvas
+
+def make_tilemap_pixmap(tilemap, tiles, palettes, tile_adjust=0, pal_adjust=-1):
   '''
   Battle bg is 64x64 map size, 8x8 tile size
   4bpp tiles
@@ -288,7 +311,7 @@ def make_tilemap_pixmap(tilemap, tiles, palettes, tile_adjust=0):
     x = (i % 32) + 32*((i//1024) % 2)
     y = (i //32) - 32*((i//1024) % 2)
     try:
-      palette = palettes[p]
+      palette = palettes[p+pal_adjust]
       tile = tiles[(tile_index+tile_adjust)%0x80]
       tile.setColorTable(palette)
       tile_px = QPixmap.fromImage(tile)
@@ -301,45 +324,108 @@ def make_battle_backgrounds(rom):
   '''
   21 pointers in memory for the compressed data of the tilesets.
   Most of these are not unique, and only a subset of the resulting block is used.
-  The block appears to get DMA'd to 0x0400 in VRAM
-
-  Terrain gets DMA'd to 0x2000 (size 0x500) in VRAM from 0x7f0000 in RAM
   '''
   palettes = [generate_palette(rom, 0x14BB31+(i*0x20)) for i in range(84)]
   battle_bgs = []
   for i in range(34):
     bg = {
-      'tiles_id':         rom[0x14BA21+(i*8)],
+      'tileset_id':       rom[0x14BA21+(i*8)],
       'pal1_id':          rom[0x14BA22+(i*8)],
       'pal2_id':          rom[0x14BA23+(i*8)],
-      'terrain_id':       rom[0x14BA24+(i*8)],
-      'terrain_flips_id': rom[0x14BA25+(i*8)],
+      'tilemap_id':       rom[0x14BA24+(i*8)],
+      'tilemap_flips_id': rom[0x14BA25+(i*8)],
+      'tilecycle_id':     rom[0x14BA27+(i*8)],
+      'palcycle_id':      rom[0x14BA28+(i*8)],
       }
-    bg['palette'] = [palettes[0], palettes[bg['pal1_id']], palettes[bg['pal2_id']]]
+    bg['palette'] = palettes[bg['pal1_id']] + palettes[bg['pal2_id']]
     battle_bgs.append(bg)
 
-  tiles_pointer_start = 0x184196
-  tiles_RAM_pointer_start = 0x184157
-  tiles_pointers = [indirect(rom, tiles_pointer_start+(i*3), length=3)-0xC00000 for i in range(21)]
-  tiles_raw = [decompress_lzss(rom, p) for p in tiles_pointers]
-  tiles_skips = [indirect(rom, tiles_RAM_pointer_start+(i*3), length=3)-0x7FC000 for i in range(21)]
-  tiles = []
-  for raw, skip in zip(tiles_raw, tiles_skips):
+  tileset_pointer_start = 0x184196
+  tileset_RAM_pointer_start = 0x184157
+  tileset_pointers = [indirect(rom, tileset_pointer_start+(i*3), length=3)-0xC00000 for i in range(21)]
+  tileset_raw = [decompress_lzss(rom, p) for p in tileset_pointers]
+  tileset_skips = [indirect(rom, tileset_RAM_pointer_start+(i*3), length=3)-0x7FC000 for i in range(21)]
+  tileset = []
+  for raw, skip in zip(tileset_raw, tileset_skips):
     r = raw[skip:]
-    tiles.append([create_tile_indexed(r[i*32:(i+1)*32]) for i in range(len(r)//32)])
+    tileset.append([create_tile_indexed(r[i*32:(i+1)*32]) for i in range(len(r)//32)])
 
-  terrain_pointer_start = 0x14C86D
-  terrain_pointers = [indirect(rom, terrain_pointer_start+(i*2))+0x140000 for i in range(28)]
-  terrains = [decompress_battle_terrain(rom, p) for p in terrain_pointers]
+  tilemap_pointer_start = 0x14C86D
+  tilemap_pointers = [indirect(rom, tilemap_pointer_start+(i*2))+0x140000 for i in range(28)]
+  tilemaps = [decompress_battle_tilemap(rom, p) for p in tilemap_pointers]
 
+  animation_ptr_start = 0x14C5B1
+  animation_ptrs = [indirect(rom, animation_ptr_start+(i*2))+0x140000 for i in range(8)]
+  animations = []
+  for ptr in animation_ptrs:
+    a = []
+    for i in range(ptr, ptr+200):
+      b = rom[i]
+      if b == 0xFF:
+        break
+      a.append(b)
+    a = [(i, j) for i, j in zip(a[0::2], a[1::2])]
+    animations.append(a)
+  animation_time = 15  # Frames before changing
+
+  pal_cycle_ptr_start = 0x14C6CD
+  pal_cycle_ptrs = [indirect(rom, pal_cycle_ptr_start+(i*2))+0x140000 for i in range(3)]
+  pal_cycles = []
+  for ptr in pal_cycle_ptrs:
+    a = []
+    for i in range(ptr, ptr+100):
+      b = rom[i]
+      if b == 0xFF:
+        break
+      a.append(b)
+    pal_cycles.append(a)
+
+  def make_pals(bg):
+    p_cycle = pal_cycles[bg['palcycle_id']]
+    p1 = bg['pal1_id']
+    p2 = bg['pal2_id']
+    pals = []
+    for p in p_cycle:
+      if p & 0x80:
+        p2 = min(p & 0x7F, len(palettes)-1)
+      else:
+        p1 = min(p, len(palettes)-1)
+      pals.append(palettes[p1] + palettes[p2])
+    return pals
+
+  canvases = []
   pixmaps = []
   for bg in battle_bgs:
-    terrain = apply_battle_terrain_flips(rom, bg['terrain_flips_id'], terrains[bg['terrain_id']])
-    pixmaps.append(make_tilemap_pixmap(terrain, tiles[bg['tiles_id']], bg['palette']))
-  #[make_tilemap_pixmap(terrains[5], tiles[2], palettes)]
+    tilemap = apply_battle_tilemap_flips(rom, bg['tilemap_flips_id'], tilemaps[bg['tilemap_id']])
+    if bg['tilecycle_id'] > 0:
+      tss = [[t for t in tileset[bg['tileset_id']]] for i in range(4)]
+      for i, tile2 in animations[bg['tilecycle_id']]:
+        frame = i >> 6
+        tile = i & 0x3F
+        tss[frame][tile] = tileset[bg['tileset_id']][tile2]
+      canvases.append([make_tilemap_canvas(tilemap, ts) for ts in tss])
+      if bg['palcycle_id'] < 3:
+        pals = make_pals(bg)
+        pl = len(pals)
+        cl = (animation_time*4)
+        px = [canvases[-1][0].pixmap(pals[0], True)]
+        i = 1
+        while (i%pl != 0) or (i%cl != 0):
+          px.append(canvases[-1][(i//animation_time)%4].pixmap(pals[i%pl], True))
+          i += 1
+        pixmaps.append(px + [1])
+      else:
+        pixmaps.append([c.pixmap(bg['palette'], True) for c in canvases[-1]]+[animation_time])
+    else:
+      canvases.append(make_tilemap_canvas(tilemap, tileset[bg['tileset_id']]))
+      if bg['palcycle_id'] < 3:
+        pals = make_pals(bg)
+        pixmaps.append([canvases[-1].pixmap(p, True) for p in pals]+[1])
+      else:
+        pixmaps.append(canvases[-1].pixmap(bg['palette'], True))
   return pixmaps
 
-def get_zone_tiles_start(rom, id):
+def get_zone_tileset_start(rom, id):
   i1 = indirect(rom, 0x0E59C0+(id*2))+7
   i2 = indirect(rom, 0x0E59C2+i1, 1)
   # There is a divergent path here based on the value. Other things appear to be affected by this.

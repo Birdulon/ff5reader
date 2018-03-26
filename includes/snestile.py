@@ -25,14 +25,14 @@ skip_pyqt5 = "PYQT4" in os.environ
 if not skip_pyqt5:
     try:
         from PyQt5 import QtGui
-        from PyQt5.QtGui import QImage, QPixmap, QColor, QPainter
+        from PyQt5.QtGui import QImage, QPixmap, QColor, QPainter, QTransform
         pyqt_version = 5
     except ImportError:
         print("Missing PyQt5, trying PyQt4...")
 if pyqt_version == 0:
     try:
         from PyQt4 import QtGui
-        from PyQt4.QtGui import QImage, QPixmap, QColor, QPainter
+        from PyQt4.QtGui import QImage, QPixmap, QColor, QPainter, QTransform
         pyqt_version = 4
     except ImportError:
         print("Missing PyQt4 dependencies")
@@ -253,9 +253,13 @@ class Canvas_Indexed:
     self.max_col = 1
     self.max_row = 1
 
-  def draw_tile(self, col, row, image):
+  def draw_tile(self, col, row, image, h_flip=False, v_flip=False, palette=0):
+    image = image.mirrored(h_flip, v_flip)
     imgbits = image.bits()
     imgbits.setsize(image.byteCount())
+    if palette:
+      p = palette<<4
+      imgbits[:] = bytes([int(i[0])|p for i in imgbits])
     x = col*self.tilesize
     y = row*self.tilesize
     start = x + y*self.width
