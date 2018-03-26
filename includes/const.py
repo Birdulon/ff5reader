@@ -1,5 +1,18 @@
 '''
-No license for now
+  This file is part of ff5reader.
+
+  ff5reader is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  ff5reader is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ff5reader.  If not, see <http://www.gnu.org/licenses/>.
 '''
 small_palette = [0xFF000000, 0x00000080, 0xFF808080, 0xFFFFFFFF]
 dialogue_palette = [0xFF000080, 0xFFFFFFFF]
@@ -107,7 +120,6 @@ Glyphs_Kanji = (
     '滅', '囗', '極', '湖',    '利', '周', '緑', '切',  # 0x198
     '紙', '胸', '平', '和',    '宇', '宙', '則', '孤',  # 0x1A0
     '溝', '　')                                       # 0x1A8
-#Glyphs_Kanji = [g if g != '　' else '<${:03X}>'.format(i) for (i, g) in enumerate(Glyphs_Kanji1)]  # This is only until they are fully transcribed
 
 Dialogue_Macros_EN = {
     0x02: [0x61, 0x7A, 0x8B, 0x8D, 0x93],  # expands to Bartz (or whatever his name is)

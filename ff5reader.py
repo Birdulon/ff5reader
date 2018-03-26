@@ -1,6 +1,19 @@
 #!/usr/bin/python3 -i
 '''
-No license for now
+  This file is part of ff5reader.
+
+  ff5reader is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  ff5reader is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with ff5reader.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
 import sys
@@ -8,11 +21,22 @@ import os
 from struct import unpack
 from itertools import chain
 from array import array
-from snestile import generate_glyphs, generate_glyphs_large, generate_palette, create_tile, create_tile_indexed, create_tile_mode7_compressed, create_tile_mode7_compressed_indexed
-from snestile import Canvas, Canvas_Indexed
-from snestile import bg_color, bg_trans
-import const
 import time
+import functools
+
+from includes.helpers import *
+from includes.qthelpers import *
+from includes.snestile import (
+  generate_glyphs, generate_glyphs_large, generate_palette,
+  create_tile, create_tile_indexed,
+  create_tile_mode7_compressed, create_tile_mode7_compressed_indexed,
+  bg_color, bg_trans,
+  Canvas, Canvas_Indexed
+  )
+from includes.snes import *
+import includes.const as const
+import includes.ff4 as ff4
+import includes.ff6 as ff6
 
 pyqt_version = 0
 skip_pyqt5 = 'PYQT4' in os.environ
@@ -73,24 +97,6 @@ if pyqt_version == 0:
               'Make sure you installed the PyQt4 package.')
         sys.exit(-1)
 
-
-
-HEX_PREFIX = '#'  # '$' or '0x' are also nice
-
-monofont = QFont()
-monofont.setStyleHint(QFont.Monospace)
-if not monofont.fixedPitch():
-    monofont.setStyleHint(QFont.TypeWriter)
-if not monofont.fixedPitch():
-    monofont.setFamily('Monospace')
-
-def divceil(numerator, denominator):
-    # Reverse floor division for ceil
-    return -(-numerator // denominator)
-
-def hex_length(i):
-    return divceil(i.bit_length(), 4)
-
 with open(filename_en, 'rb') as file:
     ROM_en = file.read()
 print(len(ROM_en), filename_en)
@@ -109,22 +115,24 @@ imglist_headers = stringlist_headers + ['Img', 'Name JP', 'Img JP']
 
 
 class FF5Reader(QMainWindow):
-  """
+  '''
   Main GUI class
-  """
+  '''
   def __init__(self):
     QMainWindow.__init__(self, None)
     global glyph_sprites_en_large, glyph_sprites_en_small, glyph_sprites_jp_small, glyph_sprites_jp_large, glyph_sprites_kanji, glyph_sprites_jp_dialogue
     perfcount()
     print('Generating Glyphs')
-    glyph_sprites_en_small = generate_glyphs(ROM_en, 0x11F000)
-    glyph_sprites_en_large = generate_glyphs_large(ROM_en, 0x03E800)
-    glyph_sprites_jp_small = generate_glyphs(ROM_jp, 0x11F000)
-    glyph_sprites_jp_large = generate_glyphs_large(ROM_jp, 0x03E800)
-    glyph_sprites_kanji = generate_glyphs_large(ROM_jp, 0x1BD000, 0x1AA)  # Kanji are unchanged in EN version
+    self.glyph_sprites = {
+      'glyphs_en_s': generate_glyphs(ROM_en, 0x11F000),
+      'glyphs_en_l': generate_glyphs_large(ROM_en, 0x03E800),
+      'glyphs_jp_s': generate_glyphs(ROM_jp, 0x11F000),
+      'glyphs_jp_l': generate_glyphs_large(ROM_jp, 0x03E800),
+      'glyphs_kanji': generate_glyphs_large(ROM_jp, 0x1BD000, 0x1AA),  # Kanji are unchanged in EN version
+      }
+    make_string_img_list = functools.partial(_make_string_img_list, **self.glyph_sprites)
     perfcount()
 
-    global zone_names
     print('Generating Strings')
     zone_names = make_string_img_list(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200, indirect=True, large=True)
     items = make_string_img_list(0x111380, 9, 256)
@@ -178,8 +186,8 @@ class FF5Reader(QMainWindow):
                            ('TerrainID',     1, None),
                            ('TerrainFlipID', 1, None),
                            (hex(5, 1),       1, None),
-                           ('Movement',      1, None),
-                           (hex(7, 1),       1, None),]
+                           ('AnimationID',   1, None),
+                           ('PaletteCycleID',1, None),]
     battle_bg_headers = ['Address'] + [z[0] for z in battle_bg_structure]
     battle_bg_data = [parse_struct(ROM_jp, 0x14BA21 + (i*8), battle_bg_structure) for i in range(34)]
 
@@ -206,7 +214,7 @@ class FF5Reader(QMainWindow):
     enemy_sprite_structure = [
       ('Sprite data offset', 2, None),
       ('Multiple things',    2, None),
-      ('Tile Layout ID',     1, None)
+      ('Tile Layout ID',     1, None),
       ]
     enemy_sprite_headers = ['Address']+[i[0] for i in enemy_sprite_structure]+['EN Name','EN Name']
     address = 0x14B180
@@ -251,11 +259,11 @@ class FF5Reader(QMainWindow):
     perfcount()
 
     print('Generating FF4 and FF6 stuff')
-    self.battle_strips_ff4 = make_character_battle_sprites_ff4(ROM_FF4jp)
-    self.field_strips_ff4 = make_character_field_sprites_ff4(ROM_FF4jp)
-    self.portraits_ff4 = make_character_portrait_sprites_ff4(ROM_FF4jp)
-    self.battle_strips_ff6 = make_character_battle_sprites_ff6(ROM_FF6jp)
-    self.portraits_ff6 = make_character_portrait_sprites_ff6(ROM_FF6jp)
+    self.battle_strips_ff4 = ff4.make_character_battle_sprites(ROM_FF4jp)
+    self.field_strips_ff4 = ff4.make_character_field_sprites(ROM_FF4jp)
+    self.portraits_ff4 = ff4.make_character_portrait_sprites(ROM_FF4jp)
+    self.battle_strips_ff6 = ff6.make_character_battle_sprites(ROM_FF6jp)
+    self.portraits_ff6 = ff6.make_character_portrait_sprites(ROM_FF6jp)
     perfcount()
 
 
@@ -273,11 +281,11 @@ class FF5Reader(QMainWindow):
     self.ff5widget.addTab(structs_tab, 'Structs')
     self.ff5widget.addTab(sprites_tab, 'Images')
 
-    sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_small, scale=4), 'Glyphs (EN)')
-    sprites_tab.addTab(make_pixmap_table(glyph_sprites_en_large, scale=2), 'Glyphs (Dialogue EN)')
-    sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_small, scale=4), 'Glyphs (JP)')
-    sprites_tab.addTab(make_pixmap_table(glyph_sprites_jp_large, scale=2), 'Glyphs (Large JP)')
-    sprites_tab.addTab(make_pixmap_table(glyph_sprites_kanji, scale=2),    'Glyphs (Kanji)')
+    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_en_s'], scale=4), 'Glyphs (EN)')
+    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_en_l'], scale=2), 'Glyphs (Dialogue EN)')
+    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_jp_s'], scale=4), 'Glyphs (JP)')
+    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_jp_l'], scale=2), 'Glyphs (Large JP)')
+    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_kanji'], scale=2),'Glyphs (Kanji)')
     sprites_tab.addTab(make_pixmap_table(worldmap_subtiles, cols=16, scale=4), 'Worldmap Subtiles')
     sprites_tab.addTab(make_pixmap_table(world_tiles_pixmaps[0], cols=16, scale=4), 'World 1 Tiles')
     sprites_tab.addTab(make_pixmap_table(world_tiles_pixmaps[1], cols=16, scale=4), 'World 2 Tiles')
@@ -334,7 +342,7 @@ class FF5Reader(QMainWindow):
     if len(string) % 1:
       string += '0'
     bytelist = [int(string[i:i+2], 16) for i in range(0, len(string), 2)]
-    tups = make_string_img_small(bytes(bytelist))
+    tups = make_string_img_small(bytes(bytelist), self.glyph_sprites['glyphs_en_s'])
     print(tups[0])
     img = QLabel()
     img.setPixmap(tups[1])
@@ -342,495 +350,13 @@ class FF5Reader(QMainWindow):
     self.decoder_input.setText('')
 
 
-
-def parse_struct(rom, offset, structure):
-  out = [hex(offset, 6)]
-  j = 0
-  for title, length, handler in structure:
-    val = indirect(rom, offset+j, length=length)
-    if callable(handler):
-      out.append(handler(val))
-    elif handler and val < len(handler):
-      out.append(handler[val])
-    else:
-      out.append(hex(val, length*2))
-    j += length
-  return out
-
-
-def make_enemy_sprites(rom):
-  sprites = []
-  for e_id in range(0, 0x180*5, 5):
-    triplane = bool(rom[0x14B180+e_id]&0x80)  # True if 3 planes, False if 4
-    bytes_per_tile = 24 if triplane else 32
-    tile_offset = ((((rom[0x14B180+e_id]&0x7F)<<8)| rom[0x14B181+e_id]) << 3) + 0x150000  # For whatever reason this is big endian
-    pal_offset = ((((rom[0x14B182+e_id]&0x03)<<8)| rom[0x14B183+e_id]) << 4) + 0x0ED000  # For whatever reason this is big endian
-    pal_size = 16 if triplane else 32
-    palette = generate_palette(rom, pal_offset, pal_size, transparent=True)
-    layout_id = rom[0x14B184+e_id]
-    boss_layout = bool(rom[0x14B182+e_id]&0x80)
-    if boss_layout:
-      layout = rom[0x10D334+(layout_id<<5):0x10D334+(layout_id<<5)+32]
-      sprite = Canvas(16, 16)
-      for x, y in [(x,y) for y in range(16) for x in range(16)]:
-        if (int.from_bytes(layout[y*2:y*2+2], 'little') & (0x8000 >> x)):
-          sprite.draw_pixmap(x, y, create_tile(rom[tile_offset:tile_offset+bytes_per_tile], palette))
-          tile_offset += bytes_per_tile
-    else:
-      layout = rom[0x10D004+(layout_id<<3):0x10D004+(layout_id<<3)+8]
-      sprite = Canvas(8, 8)
-      for x, y in [(x,y) for y in range(8) for x in range(8)]:
-        if (layout[y] & (0x80 >> x)):
-          sprite.draw_pixmap(x, y, create_tile(rom[tile_offset:tile_offset+bytes_per_tile], palette))
-          tile_offset += bytes_per_tile
-
-    # TODO: Shadow stuff
-    sprites.append(sprite.pixmap(True))
-  return sprites
-
-
-def make_worldmap_subtiles(rom, tiles_address, lut_address, length=0x100):
-  subtiles = []
-  for i in range(length):
-    pal_index = rom[lut_address+i]//16
-    subtiles.append(create_tile_mode7_compressed_indexed(rom[tiles_address+i*32:tiles_address+i*32+32], pal_index))
-  return subtiles
-
-def stitch_worldmap_tiles(rom, subtiles, offset=0x0FF0C0):
-  tiles = []
-  for i in range(0xC0):
-    canvas = Canvas_Indexed(2, 2)
-    for j in range(4):
-      k = indirect(rom, offset+(j*0xC0)+i, length=1)
-      canvas.draw_tile(j%2, j//2, subtiles[k])
-    tiles.append(canvas.image)
-  return tiles
-
-def make_worldmap_tiles(rom, tiles_address, subtiles_address, lut_address, length=0x100):
-  return stitch_worldmap_tiles(rom, make_worldmap_subtiles(rom, subtiles_address, lut_address, length=length), tiles_address)
-
-def make_worldmap_subtiles_pixmap(rom, tiles_address, lut_address, palette_address, length=0x100):
-  tiles = []
-  palettes = [generate_palette(rom, palette_address+i*32, transparent=True) for i in range(16)]
-  for i in range(length):
-    palette = palettes[rom[lut_address+i]//16]
-    tiles.append(create_tile_mode7_compressed(rom[tiles_address+i*32:tiles_address+i*32+32], palette))
-  return tiles
-
-def make_worldmap_chunk(rom, id, length=256):
-  i = indirect(rom, 0x0FE000+(id*2)) + 0x070000
-  if id > 0x433:
-    i += 0x010000
-  mountains = [0x0C, 0x1C, 0x2C]
-  chunk = []
-  while len(chunk) < length:
-    j = indirect(rom, i, 1)
-    if j >= 0xC0:
-      k = j-0xBF
-      i += 1
-      j = indirect(rom, i, 1)
-      chunk += [j]*k
-    elif j in mountains:
-      chunk += [j, j+1, j+2]
-    else:
-      chunk.append(j)
-    i += 1
-  return chunk
-
-def make_worldmap_chunk_pixmap(rom, id, palette_address, tiles):
-  chunk = make_worldmap_chunk(rom, id)
-  palette = generate_palette(rom, palette_address, length=0x320, transparent=True)
-  canvas = Canvas_Indexed(len(chunk), 1, tilesize=16)
-  for i, c in enumerate(chunk):
-    canvas.draw_tile(i, 0, tiles[c])
-  return canvas.pixmap(palette)
-
-def make_worldmap_pixmap(rom, map_id, palette_address, tiles):
-  id_offset = map_id*256
-  palette = generate_palette(rom, palette_address, length=0x320, transparent=True)
-  canvas = Canvas_Indexed(256, 256, tilesize=16)
-  for j in range(256):
-    chunk = make_worldmap_chunk(rom, j+id_offset)
-    for i, c in enumerate(chunk):
-      canvas.draw_tile(i, j, tiles[c])
-  return canvas.pixmap(palette)
-
-def make_field_tiles(rom, id):
-  tiles_address = indirect(rom, 0x1C2D84 + id*4, length=4) + 0x1C2E24
-  return [create_tile_indexed(rom[tiles_address+i*32:tiles_address+i*32+32]) for i in range(256)]
-
-def make_field_minitiles(rom, id):
-  tiles_address = indirect(rom, 0x1C0000 + id*2) + 0x1C0024
-  return [create_tile_indexed(rom[tiles_address+i*16:tiles_address+i*16+16]) for i in range(256)]
-
-def make_all_field_tiles(rom):
-  return [make_field_tiles(rom, i) for i in range(40)]
-
-def make_all_field_minitiles(rom):
-  return [make_field_minitiles(rom, i) for i in range(18)]
-
-def stitch_tileset(tiles):
-  canvas = Canvas_Indexed(16, len(tiles)//16)
-  for i, tile in enumerate(tiles):
-    canvas.draw_tile(i%16, i//16, tile)
-  return canvas
-
-def get_field_map_tiles(rom, id):
+def make_string_img_small(bytestring, glyphs, jp=False):
   '''
-  This is a bit of a mess of pointer chains for now, so generalising it will have to wait.
-  Palette selection is probably determined by the tilemap which is outside the scope of this, so we'll just use #1.
-  UPDATE: i2-i7 merely obtain a zone ID. Whoops.
+  JP version is not as fancy as this with dakuten, it just puts them on the row above and clips.
   '''
-  #i2 = indirect(rom, 0x0E2400 + id*2)
-  #i3 = indirect(rom, 0x0E2402 + i2)*2
-  #i4 = indirect(rom, 0x18E080 + i3)
-  #i5 = indirect(rom, 0x18E081 + i4+4)*3
-  #i6 = indirect(rom, 0x083320 + i5)
-  #i7 = indirect(rom, 0x080001 + i6) & 0x03FF
-  i8 = id * 0x1A
-  tilesets = indirect(rom, 0x0E9C09 + i8, length=3)
-  tile_index_0 = (tilesets & 0x00003F)        # (indirect(rom, 0x0E9C09 + i8) & 0x003F)
-  tile_index_1 = (tilesets & 0x000FC0) >> 6   # (indirect(rom, 0x0E9C09 + i8) & 0x0FC0)>>6
-  tile_index_2 = (tilesets & 0x03F000) >> 12  # (indirect(rom, 0x0E9C0A + i8) & 0x03F0)>>4
-  minitile_index = (tilesets & 0xFC0000) >> 18  # (indirect(rom, 0x0E9C0A + i8) & 0x03F0)>>4
-  pal_offset = indirect(rom, 0x0E9C16 + i8) * 0x100
-  palette_address = 0x03BB00 + pal_offset
-  palettes = [generate_palette(rom, palette_address+i*32, transparent=True) for i in range(8)]
-  return tile_index_0, tile_index_1, tile_index_2, minitile_index, palettes
-
-def make_field_map_tile_pixmap(rom, id, st_tiles, st_minitiles):
-  *tiles, minitile, palettes = get_field_map_tiles(rom, id)
-  p = palettes[1]
-  canvas = Canvas(16, 64)
-  for i, ts in enumerate(tiles):
-    canvas.draw_pixmap(0, i*16, st_tiles[ts].pixmap(p))
-  canvas.draw_pixmap(0, 48, st_minitiles[minitile].pixmap(p))
-  return canvas.pixmap()
-
-def decompress_lzss(rom, start, header=False):
-  '''
-  Algorithm from http://slickproductions.org/slickwiki/index.php/Noisecross:Final_Fantasy_V_Compression
-  '''
-  uncompressed_length = indirect(rom, start)
-  ptr = start+2
-  output = []
-  buffer = [0 for i in range(0x800)]
-  buffer_p = 0x07DE
-  while len(output) < uncompressed_length:
-    bitmap_byte = rom[ptr]
-    ptr += 1
-    for i in range(8):
-      bit = (bitmap_byte >> i) & 1
-      if bit:
-        b = rom[ptr]
-        ptr += 1
-        output.append(b)
-        buffer[buffer_p] = b
-        buffer_p = (buffer_p+1) % 0x800
-      else:
-        b1 = rom[ptr]
-        b2 = rom[ptr+1]
-        ptr += 2
-        offset = b1|((b2 & 0xE0)<<3)
-        length = b2 & 0x1F
-        for j in range(length+3):
-          b = buffer[offset]
-          output.append(b)
-          buffer[buffer_p] = b
-          buffer_p = (buffer_p+1) % 0x800
-          offset = (offset+1) % 0x800
-  return bytes(output[:uncompressed_length])
-
-def decompress_battle_terrain(rom, address):
-  '''
-  Decompresses the tilemap for a battle background.
-  '''
-  length = 0x500
-  output = [0 for i in range(length)]
-  o1 = []
-  ptr = address
-  while len(o1) < length//2:
-    a = rom[ptr]
-    ptr += 1
-    if a != 0xFF:
-      o1.append(a)
-    else:
-      repeat = rom[ptr]
-      ptr += 1
-      if repeat & 0x80:  # Repeat 2 tiles
-        repeat &= 0x3F
-        a, b = rom[ptr:ptr+2]
-        ptr += 2
-        o1 += [a, b]*repeat
-      else:  # Incremental repeat
-        a, inc = rom[ptr:ptr+2]
-        ptr += 2
-        if repeat & 0x40:  # Negative increment
-          inc = -inc
-        repeat &= 0x3F
-        o1 += [a+(i*inc) for i in range(repeat)]
-  o2 = [4*(1+(i>>7)) for i in o1]
-  output[::2] =  [i|0x80 for i in o1[:length//2]]
-  output[1::2] = [i&0xDF for i in o2[:length//2]]
-  return bytes(output)
-
-def apply_battle_terrain_flips(rom, id, battle_terrain):
-  if id==0xFF:
-    return battle_terrain
-  ptr = indirect(rom, 0x14C736+(id*2))+0x140000
-  length = len(battle_terrain)//2
-  output = list(battle_terrain)
-  buffer = []
-
-  while len(buffer) < length:
-    a = rom[ptr]
-    ptr += 1
-    if a == 0x00:
-      skip = rom[ptr]
-      ptr += 1
-      buffer += [0]*skip*8
-    else:
-      for b in reversed(range(0, 8, 1)):
-        buffer.append((a>>b)&0x01)
-
-  for i in range(len(battle_terrain)//2):
-    output[i*2+1] |= (buffer[i] << 6)
-  return bytes(output)
-
-def make_tilemap_pixmap(tilemap, tiles, palettes, tile_adjust=0):
-  '''
-  Battle bg is 64x64 map size, 8x8 tile size
-  4bpp tiles
-  '''
-  canvas = Canvas(64, 64)
-  for i in range(len(tilemap)//2):
-    a, b = tilemap[i*2:(i+1)*2]
-    tile_index = a|((b & 0x02) << 8)
-    p = (b & 0x1C) >> 2
-    priority = (b & 0x20) >> 5
-    h_flip = (b & 0x40) >> 6
-    v_flip = (b & 0x80) >> 7
-
-    x = (i % 32) + 32*((i//1024) % 2)
-    y = (i //32) - 32*((i//1024) % 2)
-    try:
-      palette = palettes[p]
-      tile = tiles[(tile_index+tile_adjust)%0x80]
-      tile.setColorTable(palette)
-      tile_px = QPixmap.fromImage(tile)
-      canvas.draw_pixmap(x, y, tile_px, h_flip, v_flip)
-    except BaseException as e:
-      print(e, p, hex(tile_index,2), hex(tile_adjust,2), hex(tile_index+tile_adjust,2))
-  return canvas.pixmap(True)
-
-def make_battle_backgrounds(rom):
-  '''
-  21 pointers in memory for the compressed data of the tilesets.
-  Most of these are not unique, and only a subset of the resulting block is used.
-  The block appears to get DMA'd to 0x0400 in VRAM
-
-  Terrain gets DMA'd to 0x2000 (size 0x500) in VRAM from 0x7f0000 in RAM
-  '''
-  palettes = [generate_palette(rom, 0x14BB31+(i*0x20)) for i in range(84)]
-  battle_bgs = []
-  for i in range(34):
-    bg = {
-      'tiles_id':         rom[0x14BA21+(i*8)],
-      'pal1_id':          rom[0x14BA22+(i*8)],
-      'pal2_id':          rom[0x14BA23+(i*8)],
-      'terrain_id':       rom[0x14BA24+(i*8)],
-      'terrain_flips_id': rom[0x14BA25+(i*8)],
-      }
-    bg['palette'] = [palettes[0], palettes[bg['pal1_id']], palettes[bg['pal2_id']]]
-    battle_bgs.append(bg)
-
-  tiles_pointer_start = 0x184196
-  tiles_RAM_pointer_start = 0x184157
-  tiles_pointers = [indirect(rom, tiles_pointer_start+(i*3), length=3)-0xC00000 for i in range(21)]
-  tiles_raw = [decompress_lzss(rom, p) for p in tiles_pointers]
-  tiles_skips = [indirect(rom, tiles_RAM_pointer_start+(i*3), length=3)-0x7FC000 for i in range(21)]
-  tiles = []
-  for raw, skip in zip(tiles_raw, tiles_skips):
-    r = raw[skip:]
-    tiles.append([create_tile_indexed(r[i*32:(i+1)*32]) for i in range(len(r)//32)])
-
-  terrain_pointer_start = 0x14C86D
-  terrain_pointers = [indirect(rom, terrain_pointer_start+(i*2))+0x140000 for i in range(28)]
-  terrains = [decompress_battle_terrain(rom, p) for p in terrain_pointers]
-
-  pixmaps = []
-  for bg in battle_bgs:
-    terrain = apply_battle_terrain_flips(rom, bg['terrain_flips_id'], terrains[bg['terrain_id']])
-    pixmaps.append(make_tilemap_pixmap(terrain, tiles[bg['tiles_id']], bg['palette']))
-  #[make_tilemap_pixmap(terrains[5], tiles[2], palettes)]
-  return pixmaps
-
-
-def make_battle_strip(rom, palette_address, tile_address, num_tiles, bpp=4):
-  if isinstance(palette_address, int):
-    palette = generate_palette(rom, palette_address, transparent=True)
-  else:
-    palette = palette_address
-  b = 24 if bpp==3 else 32
-  battle_strip = Canvas(2, divceil(num_tiles, 2))
-  for j in range(num_tiles):
-    offset = tile_address+(j*b)
-    battle_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+b], palette))
-  return battle_strip.pixmap()
-
-def get_zone_tiles_start(rom, id):
-  i1 = indirect(rom, 0x0E59C0+(id*2))+7
-  i2 = indirect(rom, 0x0E59C2+i1, 1)
-  # There is a divergent path here based on the value. Other things appear to be affected by this.
-  if i2 > 0x67:
-    i3 = ((i2 - 0x67) << 11) + 0x1A0000
-  elif i2 > 0x52:
-    i3 = ((i2 - 0x52) << 9) + 0x1A0000
-  elif i2 > 0x4B:
-    i3 = ((i2 - 0x4B) << 11) + 0x1AC800
-  elif i2 > 0x32:
-    i3 = ((i2 - 0x32) << 10) + 0x1A0000
-  else:
-    i3 = (i2 << 9) + 0x1A0000
-  return i3
-
-
-def make_character_battle_sprites_ff4(rom):
-  tile_address = 0xD0000
-  pig_tile_address = 0xD7000
-  golbez_tile_address = 0xD7600
-  anna_tile_address = 0xD7960
-  palette_address = 0xE7D00
-  golbez_palette_address = 0xE7EC0
-  anna_palette_address = 0xE7EE0
-  battle_strips = []
-  for i in range(0, 14*32, 32):  # 14 regular characters. Pig, Golbez and Anna follow with different tile spacing and palette order.
-    battle_strips.append(make_battle_strip(rom, palette_address+i, tile_address+(i*64), 64))  # KO sprites are here which means more tiles per strip than FFV
-  battle_strips.append(make_battle_strip(rom, golbez_palette_address, golbez_tile_address, 27))
-  battle_strips.append(make_battle_strip(rom, anna_palette_address, anna_tile_address, 14))
-  for i in range(0, 16*32, 32):  # 16 pigs.
-    battle_strips.append(make_battle_strip(rom, palette_address+i, pig_tile_address, 48))
-  return battle_strips
-
-def make_character_field_sprites_ff4(rom):
-  tile_address = 0xD8000
-  palette_address = 0x68000
-  palettes = [generate_palette(rom, palette_address+i*16, transparent=True) for i in range(8)]
-  LUT = [0, 0, 1, 2, 2, 2, 0, 1, 1, 3, 0, 1, 0, 0,  0,0,0]
-  strips = []
-  for p, i in zip(LUT, range(0, 17*24*32, 24*32)):  # 14 regular characters. Mini, toad, pig.
-    strips.append(make_battle_strip(rom, palettes[p], tile_address+(i), 32, bpp=3))
-  for palette in palettes:
-    for i in range(0, 42*24*16, 24*16):  # 42 others
-      strips.append(make_battle_strip(rom, palette, tile_address+(17*24*32)+(i), 16, bpp=3))
-  #for i in range(0, 16*24, 24):  # 16 pigs.
-    #strips.append(make_battle_strip(rom, palette_address+i, tile_address, 48))
-  return strips
-
-def make_character_portrait_sprites_ff4(rom):
-  # 4x4 tiles per character, all 3bpp
-  tile_address = 0xED3C0
-  palette_address = 0x686D0
-  palettes = [generate_palette(rom, palette_address+i*16, transparent=True) for i in range(14)]
-  portrait_images = []
-  for t_start in [tile_address+i*16*24 for i in range(17)]:
-    canvas = Canvas_Indexed(4, 4)
-    for t in range(16):
-      offset = t_start+(t*24)
-      canvas.draw_tile(t%4, t//4, create_tile_indexed(rom[offset:offset+24]))
-    portrait_images.append(canvas)
-
-  portraits = []
-  for palette, portrait in zip(palettes, portrait_images):
-    portraits.append(portrait.pixmap(palette))
-  for portrait in portrait_images[14:]:  # 14, 15, 16 are Pig, Mini, Toad and use character palettes
-    for palette in palettes:
-      portraits.append(portrait.pixmap(palette))
-  for palette in palettes:
-    for portrait in portrait_images[:14]:
-      portraits.append(portrait.pixmap(palette))
-  return portraits
-
-
-def make_character_battle_sprites_ff6(rom):
-  # Palettes are non-trivial for this, will need a LUT
-  tile_address = 0x150000
-  palette_address = 0x268000
-  battle_strips = []
-  for i in range(0, 16*32, 32):  # quite a few characters
-    battle_strips.append(make_battle_strip(rom, palette_address+0x80, tile_address+(i*181), 181))
-  tile_address += 16*181*32
-  for i in range(0, 6*32, 32):  # bonus memes
-    battle_strips.append(make_battle_strip(rom, palette_address+0x80, tile_address+(i*171), 171))
-  tile_address += 6*171*32
-  for i in range(0, 4*32, 32):  # bonus memes
-    battle_strips.append(make_battle_strip(rom, palette_address+0x80, tile_address+(i*55), 55))
-  tile_address += 4*55*32
-  for i in range(0, 40*32, 32):  # bonus memes
-    battle_strips.append(make_battle_strip(rom, palette_address+0x80, tile_address+(i*56), 56))
-  return battle_strips
-
-def make_character_portrait_sprites_ff6(rom):
-  # 5x5 tiles per character, annoying arrangement but palettes are good
-  tile_address = 0x2D1D00
-  palette_address = 0x2D5860
-  palettes = [generate_palette(rom, palette_address+i*32, transparent=True) for i in range(19)]
-  # Coordinates for each tile
-  LUT = [(0,0), (1,0), (2,0), (3,0), (0,2), (1,2), (2,2), (3,2), (4,0), (4,1), (4,2), (4,3), (4,4), (0,4), (1,4), (2,4), (0,1), (1,1), (2,1), (3,1), (0,3), (1,3), (2,3), (3,3), (3,4)]
-  portrait_images = []
-  for t_start in [tile_address+i*25*32 for i in range(19)]:
-    canvas = Canvas_Indexed(5, 5)
-    for t in range(25):
-      offset = t_start+(t*32)
-      canvas.draw_tile(*LUT[t], create_tile_indexed(rom[offset:offset+32]))
-    portrait_images.append(canvas)
-
-  portraits = []
-  for palette, portrait in zip(palettes, portrait_images):
-    portraits.append(portrait.pixmap(palette))
-  for palette in palettes:
-    for portrait in portrait_images:
-      portraits.append(portrait.pixmap(palette))
-  return portraits
-
-
-def make_character_battle_sprites(rom):
-  tile_address = 0x120000
-  palette_address = 0x14A3C0
-  battle_strips = []
-  for i in range(0, (22*5)*32, 32):  # 22 jobs 5 characters
-    battle_strips.append(make_battle_strip(rom, palette_address+i, tile_address+(i*48), 48))
-  return battle_strips
-
-
-def make_character_status_sprites(rom):
-  tile_address = 0x149400
-  palette_address = 0x14A660
-  pixmaps = []
-  for i in range(5):
-    palette = generate_palette(rom, palette_address + (i*22*32), transparent=True)  # Freelance palette per character
-    wounded = Canvas(3, 2)
-    for j in range(6):
-      offset = tile_address+(i*192)+(j*32)
-      wounded.draw_pixmap(j%3, j//3, create_tile(rom[offset:offset+32], palette))
-    pixmaps.append(wounded.pixmap())
-    mini_strip = Canvas(2, 19)
-    for j in range(38):
-      offset = tile_address+0x3C0+(j*24)
-      mini_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+24], palette))
-    pixmaps.append(mini_strip.pixmap())
-    frog_strip = Canvas(2, 15)
-    for j in range(30):
-      offset = tile_address+0x750+(j*24)
-      frog_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+24], palette))
-    pixmaps.append(frog_strip.pixmap())
-  return pixmaps
-
-
-def make_string_img_small(bytestring, jp=False):
   if len(bytestring) < 1:
     raise ValueError('Empty bytestring was passed')
-  string = ""
+  string = ''
   img = QImage(len(bytestring)*8, 10, QImage.Format_RGB16)
   img.fill(bg_color)
   painter = QtGui.QPainter(img)
@@ -839,22 +365,22 @@ def make_string_img_small(bytestring, jp=False):
       string = string + const.Glyphs_JP2[j]
       if 0x20 <= j < 0x52:
         if j > 0x48:
-          painter.drawPixmap(x*8, 2, glyph_sprites_jp_small[j+0x17])
-          painter.drawPixmap(x*8+1,-5, glyph_sprites_jp_small[0x52])
+          painter.drawPixmap(x*8, 2, glyphs[j+0x17])
+          painter.drawPixmap(x*8+1,-5, glyphs[0x52])
         else:
-          painter.drawPixmap(x*8, 2, glyph_sprites_jp_small[j+0x40])
-          painter.drawPixmap(x*8+1,-6, glyph_sprites_jp_small[0x51])
+          painter.drawPixmap(x*8, 2, glyphs[j+0x40])
+          painter.drawPixmap(x*8+1,-6, glyphs[0x51])
       else:
-        painter.drawPixmap(x*8, 2, glyph_sprites_jp_small[j])
+        painter.drawPixmap(x*8, 2, glyphs[j])
   else:
     for x, j in enumerate(bytestring):
       string = string + const.Glyphs[j]
-      painter.drawPixmap(x*8, 1, glyph_sprites_en_small[j])
+      painter.drawPixmap(x*8, 1, glyphs[j])
   del painter
   return string, QPixmap.fromImage(img)
 
 
-def make_string_img_large(bytestring, macros=None, jp=False):
+def make_string_img_large(bytestring, glyphs, glyphs_kanji, macros=None, jp=False):
   '''
   This is how we decipher dialogue data, which has multiple lines, macro expansions and kanji.
   English characters have varying widths. In the japanese version, everything is fullwidth (16px)
@@ -874,7 +400,7 @@ def make_string_img_large(bytestring, macros=None, jp=False):
     else:
       newstring.append(b)
 
-  string = ""
+  string = ''
   # Because the length of the input has little bearing on the size of the image thanks to linebreaks and macros, we overprovision then clip away.
   max_width = 256  # This seems to check out, but the EN dialogue has linebreaks virtually everywhere anyway
   max_height = 1024  # I've seen up to 58 rows in EN, 36 in JP. Stay safe.
@@ -896,26 +422,29 @@ def make_string_img_large(bytestring, macros=None, jp=False):
       y += 16
     elif 0x1E00 <= j < 0x1FAA:  # Kanji live in this range
       string += const.Glyphs_Kanji[j-0x1E00]
-      painter.drawPixmap(x, y+2, glyph_sprites_kanji[j-0x1E00])
+      painter.drawPixmap(x, y+2, glyphs_kanji[j-0x1E00])
       x += 16
     elif j < 0x13 or j > 0xFF:  # Everything remaining outside this is a control char
       string += '[0x{:02X}]'.format(j)
     else:
       if jp:
         string += const.Glyphs_JP_large[j]
-        painter.drawPixmap(x, y+2, glyph_sprites_jp_large[j])
+        painter.drawPixmap(x, y+2, glyphs[j])
         x += 16
       else:
         string += const.Glyphs[j]
-        painter.drawPixmap(x, y+4, glyph_sprites_en_large[j])
+        painter.drawPixmap(x, y+4, glyphs[j])
         x += const.Dialogue_Width[j]
   del painter
   xmax = x if x > xmax else xmax
   return string, QPixmap.fromImage(img.copy(0, 0, xmax, y+16))
 
 
-def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_str=None, start_jp_str=None,
-                         indirect=False, large=False, macros_en=None, macros_jp=None):
+def _make_string_img_list(start, length, num,
+                          start_jp=None, len_jp=None, start_str=None, start_jp_str=None,
+                          indirect=False, large=False, macros_en=None, macros_jp=None,
+                          glyphs_en_s=None, glyphs_en_l=None,
+                          glyphs_jp_s=None, glyphs_jp_l=None, glyphs_kanji=None):
   start_jp = start if start_jp is None else start_jp
   len_jp = length if len_jp is None else len_jp
   start_str = start if start_str is None else start_str
@@ -941,17 +470,17 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
         break
       try:  # When dealing with pointer redirection we might end up passing empty strings
         if large:
-          str_en, img_en = make_string_img_large(ROM_en[en_start:en_end], macros_en)
+          str_en, img_en = make_string_img_large(ROM_en[en_start:en_end], glyphs_en_l,  glyphs_kanji, macros_en)
         else:
-          str_en, img_en = make_string_img_small(ROM_en[en_start:en_end])
+          str_en, img_en = make_string_img_small(ROM_en[en_start:en_end], glyphs_en_s)
       except ValueError:
         str_en = ''
         img_en = None
       try:
         if large:
-          str_jp, img_jp = make_string_img_large(ROM_jp[jp_start:jp_end], macros_jp, jp=True)
+          str_jp, img_jp = make_string_img_large(ROM_jp[jp_start:jp_end], glyphs_jp_l, glyphs_kanji, macros_jp, jp=True)
         else:
-          str_jp, img_jp = make_string_img_small(ROM_jp[jp_start:jp_end], jp=True)
+          str_jp, img_jp = make_string_img_small(ROM_jp[jp_start:jp_end], glyphs_jp_s, jp=True)
       except ValueError:
         str_jp = ''
         img_jp = None
@@ -964,113 +493,13 @@ def make_string_img_list(start, length, num, start_jp=None, len_jp=None, start_s
       j1 = start + (id*length)
       j2 = start_jp + (id*len_jp)
       if large:
-        str_en, img_en = make_string_img_large(ROM_en[j1:j1+length], macros_en)
-        str_jp, img_jp = make_string_img_large(ROM_jp[j2:j2+len_jp], macros_jp, jp=True)
+        str_en, img_en = make_string_img_large(ROM_en[j1:j1+length], glyphs_en_l, glyphs_kanji, macros_en)
+        str_jp, img_jp = make_string_img_large(ROM_jp[j2:j2+len_jp], glyphs_jp_l, glyphs_kanji, macros_jp, jp=True)
       else:
-        str_en, img_en = make_string_img_small(ROM_en[j1:j1+length])
-        str_jp, img_jp = make_string_img_small(ROM_jp[j2:j2+len_jp], jp=True)
+        str_en, img_en = make_string_img_small(ROM_en[j1:j1+length], glyphs_en_s)
+        str_jp, img_jp = make_string_img_small(ROM_jp[j2:j2+len_jp], glyphs_jp_s, jp=True)
       stringlist.append([hex(j1, 6), hex(id, id_digits), str_en, img_en, str_jp, img_jp])
   return stringlist
-
-
-def table_size_to_contents(table):
-    # Stupid hack to get table to size correctly
-    table.hide()
-    geometry = table.viewport().geometry()
-    table.viewport().setGeometry(QtCore.QRect(0, 0, 0x7FFFFFFF, 0x7FFFFFFF))
-    table.resizeColumnsToContents()
-    table.resizeRowsToContents()
-    table.viewport().setGeometry(geometry)
-    table.show()
-
-
-def make_table(headers, items, sortable=False, row_labels=True, scale=2):
-  '''
-  Helper function to tabulate 2d lists
-  '''
-  cols = len(headers)
-  rows = len(items)
-  rd = hex_length(rows-1)
-  table = QTableWidget(rows, cols)
-  if row_labels:
-    table.setVerticalHeaderLabels([hex(v, rd) for v in range(rows)])
-  else:
-    table.verticalHeader().setVisible(False)
-  table.setHorizontalHeaderLabels(headers)
-  for row, col, item in [(x,y,items[x][y]) for x in range(rows) for y in range(cols)]:
-    if isinstance(item, QWidget):
-      table.setCellWidget(row, col, item)
-    elif isinstance(item, QPixmap):
-      pix = item.scaled(item.size() * scale)
-      lab = QLabel()
-      lab.setPixmap(pix)
-      table.setCellWidget(row, col, lab)
-    elif item is not None:
-      if item.endswith('₁₆'):
-        s = '<tt>{}</tt><sub>16</sub>'.format(item[:-2])
-        lab = QLabel(s)
-        table.setCellWidget(row, col, lab)
-      else:
-        q_item = QTableWidgetItem(item)
-        if item.startswith(HEX_PREFIX):
-          q_item.setFont(monofont)
-        table.setItem(row, col, q_item)
-  table_size_to_contents(table)
-  if sortable:
-    table.setSortingEnabled(True)
-    table.sortItems(0)
-  return table
-
-
-def make_pixmap_table(items, cols=16, scale=4, large=False):
-  rows = divceil(len(items), cols)
-  rd = hex_length(rows-1)+1
-  cd = hex_length(cols-1)
-  table = QTableWidget(rows, cols)
-  if large:
-    table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
-    table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
-  table.setVerticalHeaderLabels([hex(v*cols, rd) for v in range(rows)])
-  table.setHorizontalHeaderLabels([hex(v, cd) for v in range(cols)])
-  for i, item in enumerate(items):
-    if isinstance(item, QWidget):
-      table.setCellWidget(i // cols, i % cols, item)
-    elif isinstance(item, QPixmap):
-      lab = QLabel()
-      lab.setPixmap(item.scaled(item.size() * scale))
-      lab.setAlignment(QtCore.Qt.AlignCenter)
-      table.setCellWidget(i // cols, i % cols, lab)
-  table_size_to_contents(table)
-  return table
-
-
-def stack_labels(*items):
-  w = QWidget()
-  w.setContentsMargins(0, 0, 0, 0)
-  l = QVBoxLayout()
-  l.setAlignment(QtCore.Qt.AlignCenter)
-  l.setSpacing(0)
-  l.setContentsMargins(0, 0, 0, 0)
-  for item in items:
-    lab = QLabel()
-    if isinstance(item, QPixmap):
-      lab.setPixmap(item)
-    else:
-      lab.setText(item.strip())
-    lab.setAlignment(QtCore.Qt.AlignCenter)
-    lab.setMargin(0)
-    l.addWidget(lab)
-  w.setLayout(l)
-  return w
-
-
-def hex(num, digits):
-  # Consolidate formatting for consistency
-  #return '{:0{}X}₁₆'.format(num, digits)
-  return HEX_PREFIX + '{:0{}X}'.format(num, digits)
-
-def indirect(rom, start, length=2):
-  return int.from_bytes(rom[start:start+length], 'little')
 
 last_perfcount = None
 def perfcount():
