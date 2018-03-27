@@ -156,7 +156,7 @@ def make_table(headers, items, sortable=False, row_labels=True, scale=2):
   return table
 
 
-def make_pixmap_table(items, cols=16, scale=4, large=False):
+def make_px_table(items, cols=16, scale=4, large=False):
   rows = divceil(len(items), cols)
   rd = hex_length(rows-1)+1
   cd = hex_length(cols-1)

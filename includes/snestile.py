@@ -213,12 +213,13 @@ def generate_palette(rom, offset, length=32, transparent=False):
 
 
 class Canvas:
-  def __init__(self, cols, rows, color=bg_trans):
-    self.image = QImage(8*cols, 8*rows, QImage.Format_ARGB32_Premultiplied)
+  def __init__(self, cols, rows, color=bg_trans, tilesize=8):
+    self.image = QImage(tilesize*cols, tilesize*rows, QImage.Format_ARGB32_Premultiplied)
+    self.tilesize = tilesize
     self.image.fill(color)
     self.painter = QtGui.QPainter(self.image)
-    self.max_x = 1
-    self.max_y = 1
+    self.max_col = 1
+    self.max_row = 1
 
   def __del__(self):
     del self.painter
@@ -226,19 +227,19 @@ class Canvas:
   def draw_pixmap(self, col, row, pixmap, h_flip=False, v_flip=False):
     h_s = -1 if h_flip else 1
     v_s = -1 if v_flip else 1
-    x = (col+h_flip)*8*h_s
-    y = (row+v_flip)*8*v_s
+    x = (col+h_flip)*self.tilesize*h_s
+    y = (row+v_flip)*self.tilesize*v_s
     self.painter.scale(h_s, v_s)
     self.painter.drawPixmap(x, y, pixmap)
     self.painter.scale(h_s, v_s)  # Invert it again to restore it to normal
-    if col > self.max_x:
-      self.max_x = col
-    if row > self.max_y:
-      self.max_y = row
+    if col > self.max_col:
+      self.max_col = col
+    if row > self.max_row:
+      self.max_row = row
 
   def pixmap(self, trim=False):
     if trim:
-      return QPixmap.fromImage(self.image.copy(0, 0, self.max_x*8+8, self.max_y*8+8))
+      return QPixmap.fromImage(self.image.copy(0, 0, (self.max_col+1)*self.tilesize, (self.max_row+1)*self.tilesize))
     return QPixmap.fromImage(self.image)
 
 
@@ -270,6 +271,8 @@ class Canvas_Indexed:
     self.max_row = max(row, self.max_row)
 
   def pixmap(self, palette, trim=False):
+    if isinstance(palette[0], list):
+      palette = [i for p in palette for i in p]  # Flatten
     if trim:
       img = self.image.copy(0, 0, (self.max_col+1)*self.tilesize, (self.max_row+1)*self.tilesize)
       img.setColorTable(palette)

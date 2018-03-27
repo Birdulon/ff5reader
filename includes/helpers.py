@@ -29,7 +29,7 @@ def hex_length(i):
   '''
   return divceil(i.bit_length(), 4)
 
-def hex(num, digits):
+def hex(num, digits=2):
   '''
   Consolidate hex formatting for consistency
   '''
@@ -60,12 +60,16 @@ def parse_struct(rom, offset, structure):
   return out
 
 
-def decompress_lzss(rom, start, header=False):
+def decompress_lzss(rom, start, header=False, length=None):
   '''
   Algorithm from http://slickproductions.org/slickwiki/index.php/Noisecross:Final_Fantasy_V_Compression
   '''
-  uncompressed_length = indirect(rom, start)
-  ptr = start+2
+  ptr = start
+  if length:
+    uncompressed_length = length
+  else:
+    uncompressed_length = indirect(rom, start)
+    ptr += 2
   output = []
   buffer = [0 for i in range(0x800)]
   buffer_p = 0x07DE

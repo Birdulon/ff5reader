@@ -152,30 +152,32 @@ class FF5Reader(QMainWindow):
                   (data & 0x03F000) >> 12,
                   (data & 0xFC0000) >> 18]
       return ' '.join([hex(i,2) for i in tilesets])
+    def split_blockmaps(data):
+      blockmaps = [(data & 0x000003FF) - 1,
+                  ((data & 0x000FFC00) >> 10) - 1,
+                  ((data & 0x3FF00000) >> 20) - 1]
+      return ' '.join([hex(i,3) for i in blockmaps])
 
-    zone_structure = [('NPC Layer',      2, None),
-                      ('Name',           1, [z[2] for z in zone_names]),
-                      ('ShadowFlags',    1, None),
-                      (hex(4, 2),        1, None),
-                      (hex(5, 2),        1, None),
-                      ('Flags '+hex(6,2),1, None),
-                      (hex(7, 2),        1, None),
-                      ('Tilesets',       3, split_tilesets),
-                      (hex(11, 2),       1, None),
-                      ('Collision Layer',1, None),
-                      (hex(13, 2),       1, None),
-                      (hex(14, 2),       1, None),
-                      (hex(15, 2),       1, None),
-                      (hex(16, 2),       1, None),
-                      (hex(17, 2),       1, None),
-                      (hex(18, 2),       1, None),
-                      (hex(19, 2),       1, None),
-                      (hex(20, 2),       1, None),
-                      (hex(21, 2),       1, None),
-                      ('Palette',        1, None),
-                      (hex(23, 2),       1, None),
-                      (hex(24, 2),       1, None),
-                      ('Music',          1, const.BGM_Tracks)]
+    zone_structure = [('NPC Layer',      2, None),  # 00 01
+                      ('Name',           1, [z[2] for z in zone_names]),  # 02
+                      ('ShadowFlags',    1, None),  # 03
+                      ('Graphic maths',        1, None),  # 04
+                      ('Tile properties',        1, None),  # 05
+                      ('Flags '+hex(6),  1, None),  # 06
+                      (hex(7),           1, None),  # 07
+                      ('Blockset',       1, None),  # 08
+                      ('Tilesets',       3, split_tilesets),  # 09 0A 0B
+                      ('Blockmaps',      4, split_blockmaps),  # 0C 0D 0E 0F
+                      (hex(16),          1, None),  # 10
+                      (hex(17),          1, None),  # 11
+                      (hex(18),          1, None),  # 12
+                      (hex(19),          1, None),  # 13
+                      (hex(20),          1, None),  # 14
+                      (hex(21),          1, None),  # 15
+                      ('Palette',        1, None),  # 16
+                      (hex(23),          1, None),  # 17
+                      (hex(24),          1, None),  # 18
+                      ('Music',          1, const.BGM_Tracks)]  # 19
     zone_headers = ['Address'] + [z[0] for z in zone_structure]
     zone_data = [parse_struct(ROM_en, 0x0E9C00 + (i*0x1A), zone_structure) for i in range(const.zone_count)]
 
@@ -223,20 +225,21 @@ class FF5Reader(QMainWindow):
     perfcount()
     print('Generating map tiles')
     worldmap_palettes = [generate_palette(ROM_jp, 0x0FFCC0+(i*0x100), length=0x160, transparent=True) for i in range(3)]
-    world_tiles = [make_worldmap_tiles(ROM_jp, 0x0FF0C0+(i*0x300), 0x1B8000+(i*0x2000), 0x0FF9C0+(i*0x100)) for i in range(3)]
+    world_tiles = [make_worldmap_blocks(ROM_jp, 0x0FF0C0+(i*0x300), 0x1B8000+(i*0x2000), 0x0FF9C0+(i*0x100)) for i in range(3)]
     worldpixmaps = [make_worldmap_pixmap(ROM_jp, i, 0x0FFCC0+(t*0x100), world_tiles[t]) for i, t in enumerate([0, 1, 0, 2, 2])]
-    world_tiles_pixmaps = []
+    world_blocks_pixmaps = []
     for i, tiles in enumerate(world_tiles):
       a = []
       for t in tiles:
         t.setColorTable(worldmap_palettes[i])
         a.append(QPixmap.fromImage(t))
-      world_tiles_pixmaps.append(a)
+      world_blocks_pixmaps.append(a)
     perfcount()
-    worldmap_subtiles = make_worldmap_subtiles_pixmap(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
-    worldmap_subtiles += make_worldmap_subtiles_pixmap(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)
-    worldmap_subtiles += make_worldmap_subtiles_pixmap(ROM_jp, 0x1BC000, 0x0FFBC0, 0x0FFEC0, length=128)
+    worldmap_tiles = make_worldmap_tiles_pixmap(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
+    worldmap_tiles += make_worldmap_tiles_pixmap(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)
+    worldmap_tiles += make_worldmap_tiles_pixmap(ROM_jp, 0x1BC000, 0x0FFBC0, 0x0FFEC0, length=128)
     perfcount()
+
     field_tiles = make_all_field_tiles(ROM_jp)
     field_minitiles = make_all_field_minitiles(ROM_jp)
     perfcount()
@@ -245,6 +248,19 @@ class FF5Reader(QMainWindow):
     perfcount()
     fieldmap_tiles = [make_field_map_tile_pixmap(ROM_jp, i, st_field_tiles, st_field_minitiles) for i in range(const.zone_count)]
     perfcount()
+    print('Generating field map blocks')
+    zones = [parse_zone(ROM_jp, i) for i in range(const.zone_count)]
+    field_blocksets = [get_field_map_block_layouts(ROM_jp, i) for i in range(28)]
+    perfcount()
+    blockmaps = get_blockmaps(ROM_jp)
+    field_blocks = []
+    zone_pxs = []
+    for z in zones:
+      blocks = make_field_map_blocks_px(ROM_jp, z.blockset, field_tiles, field_minitiles, field_blocksets)
+      field_blocks.append(stitch_tileset_px(blocks))
+      zone_pxs += make_zone_pxs(blocks, [blockmaps[b] for b in z.blockmaps if b!=-1])
+    perfcount()
+
     print('Generating Battle backgrounds')
     battle_bgs = make_battle_backgrounds(ROM_jp)
     perfcount()
@@ -275,31 +291,36 @@ class FF5Reader(QMainWindow):
     strings_tab = QTabWidget()
     structs_tab = QTabWidget()
     sprites_tab = QTabWidget()
+    backgrounds_tab = QTabWidget()
     self.ff5widget.addTab(strings_tab, 'Strings')
     self.ff5widget.addTab(structs_tab, 'Structs')
     self.ff5widget.addTab(sprites_tab, 'Images')
+    self.ff5widget.addTab(backgrounds_tab, 'Backgrounds')
 
-    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_en_s'], scale=4), 'Glyphs (EN)')
-    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_en_l'], scale=2), 'Glyphs (Dialogue EN)')
-    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_jp_s'], scale=4), 'Glyphs (JP)')
-    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_jp_l'], scale=2), 'Glyphs (Large JP)')
-    sprites_tab.addTab(make_pixmap_table(self.glyph_sprites['glyphs_kanji'], scale=2),'Glyphs (Kanji)')
-    sprites_tab.addTab(make_pixmap_table(worldmap_subtiles, cols=16, scale=4), 'Worldmap Subtiles')
-    sprites_tab.addTab(make_pixmap_table(world_tiles_pixmaps[0], cols=16, scale=4), 'World 1 Tiles')
-    sprites_tab.addTab(make_pixmap_table(world_tiles_pixmaps[1], cols=16, scale=4), 'World 2 Tiles')
-    sprites_tab.addTab(make_pixmap_table(world_tiles_pixmaps[2], cols=16, scale=4), 'Underwater Tiles')
-    sprites_tab.addTab(make_pixmap_table(worldpixmaps, cols=1, scale=1, large=True), 'Worldmaps')
-    sprites_tab.addTab(make_pixmap_table(fieldmap_tiles, cols=8, scale=2), 'Fieldmap Tiles')
-    sprites_tab.addTab(make_pixmap_table(battle_bgs, cols=8, scale=1), 'Battle BGs')
-    sprites_tab.addTab(make_pixmap_table(self.battle_strips, cols=22, scale=2), 'Character Battle Sprites')
-    sprites_tab.addTab(make_pixmap_table(status_strips, cols=22, scale=2), 'Status Sprites')
-    sprites_tab.addTab(make_pixmap_table(enemy_sprites_named, cols=32, scale=1), 'Enemy Sprites')
+    sprites_tab.addTab(make_px_table(self.glyph_sprites['glyphs_en_s'], scale=4), 'Glyphs (EN)')
+    sprites_tab.addTab(make_px_table(self.glyph_sprites['glyphs_en_l'], scale=2), 'Glyphs (Dialogue EN)')
+    sprites_tab.addTab(make_px_table(self.glyph_sprites['glyphs_jp_s'], scale=4), 'Glyphs (JP)')
+    sprites_tab.addTab(make_px_table(self.glyph_sprites['glyphs_jp_l'], scale=2), 'Glyphs (Large JP)')
+    sprites_tab.addTab(make_px_table(self.glyph_sprites['glyphs_kanji'], scale=2),'Glyphs (Kanji)')
+    sprites_tab.addTab(make_px_table(self.battle_strips, cols=22, scale=2), 'Character Battle Sprites')
+    sprites_tab.addTab(make_px_table(status_strips, cols=22, scale=2), 'Status Sprites')
+    sprites_tab.addTab(make_px_table(enemy_sprites_named, cols=32, scale=1), 'Enemy Sprites')
 
-    self.ff4widget.addTab(make_pixmap_table(self.battle_strips_ff4, cols=16, scale=2), 'Character Battle Sprites')
-    self.ff4widget.addTab(make_pixmap_table(self.portraits_ff4, cols=14, scale=2), 'Character Portraits')
-    self.ff4widget.addTab(make_pixmap_table(self.field_strips_ff4, cols=17, scale=2), 'Character Field Sprites')
-    self.ff6widget.addTab(make_pixmap_table(self.battle_strips_ff6, cols=32, scale=2), 'Character Sprites')
-    self.ff6widget.addTab(make_pixmap_table(self.portraits_ff6, cols=19, scale=2), 'Character Portraits')
+    backgrounds_tab.addTab(make_px_table(worldmap_tiles, cols=16, scale=4), 'Worldmap Tiles')
+    backgrounds_tab.addTab(make_px_table(world_blocks_pixmaps[0], cols=16, scale=4), 'World 1 Blocks')
+    backgrounds_tab.addTab(make_px_table(world_blocks_pixmaps[1], cols=16, scale=4), 'World 2 Blocks')
+    backgrounds_tab.addTab(make_px_table(world_blocks_pixmaps[2], cols=16, scale=4), 'Underwater Blocks')
+    backgrounds_tab.addTab(make_px_table(worldpixmaps, cols=1, scale=1, large=True), 'Worldmaps')
+    backgrounds_tab.addTab(make_px_table(fieldmap_tiles, cols=8, scale=1), 'Fieldmap Tiles')
+    backgrounds_tab.addTab(make_px_table(field_blocks, cols=16, scale=1), 'Field Blocks')
+    backgrounds_tab.addTab(make_px_table(zone_pxs, cols=4, scale=1, large=1), 'Zone')
+    backgrounds_tab.addTab(make_px_table(battle_bgs, cols=8, scale=1), 'Battle BGs')
+
+    self.ff4widget.addTab(make_px_table(self.battle_strips_ff4, cols=16, scale=2), 'Character Battle Sprites')
+    self.ff4widget.addTab(make_px_table(self.portraits_ff4, cols=14, scale=2), 'Character Portraits')
+    self.ff4widget.addTab(make_px_table(self.field_strips_ff4, cols=17, scale=2), 'Character Field Sprites')
+    self.ff6widget.addTab(make_px_table(self.battle_strips_ff6, cols=32, scale=2), 'Character Sprites')
+    self.ff6widget.addTab(make_px_table(self.portraits_ff6, cols=19, scale=2), 'Character Portraits')
 
 
     structs_tab.addTab(make_table(zone_headers, zone_data, True), 'Zones')
