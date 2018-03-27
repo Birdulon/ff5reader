@@ -256,7 +256,7 @@ class FF5Reader(QMainWindow):
     field_blocks = []
     zone_pxs = []
     for z in zones:
-      blocks = make_field_map_blocks_px(ROM_jp, z.blockset, field_tiles, field_minitiles, field_blocksets)
+      blocks = make_field_map_blocks_px2(ROM_jp, z, field_tiles, field_minitiles, field_blocksets)
       field_blocks.append(stitch_tileset_px(blocks))
       zone_pxs += make_zone_pxs(blocks, [blockmaps[b] for b in z.blockmaps if b!=-1])
     perfcount()
@@ -311,9 +311,9 @@ class FF5Reader(QMainWindow):
     backgrounds_tab.addTab(make_px_table(world_blocks_pixmaps[1], cols=16, scale=4), 'World 2 Blocks')
     backgrounds_tab.addTab(make_px_table(world_blocks_pixmaps[2], cols=16, scale=4), 'Underwater Blocks')
     backgrounds_tab.addTab(make_px_table(worldpixmaps, cols=1, scale=1, large=True), 'Worldmaps')
-    backgrounds_tab.addTab(make_px_table(fieldmap_tiles, cols=8, scale=1), 'Fieldmap Tiles')
+    backgrounds_tab.addTab(make_px_table(fieldmap_tiles, cols=16, scale=1), 'Fieldmap Tiles')
     backgrounds_tab.addTab(make_px_table(field_blocks, cols=16, scale=1), 'Field Blocks')
-    backgrounds_tab.addTab(make_px_table(zone_pxs, cols=4, scale=1, large=1), 'Zone')
+    backgrounds_tab.addTab(make_px_table(zone_pxs, cols=3, scale=1, large=1), 'Zone')
     backgrounds_tab.addTab(make_px_table(battle_bgs, cols=8, scale=1), 'Battle BGs')
 
     self.ff4widget.addTab(make_px_table(self.battle_strips_ff4, cols=16, scale=2), 'Character Battle Sprites')

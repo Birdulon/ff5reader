@@ -263,6 +263,14 @@ def make_field_map_blocks_px(rom, id, tilesets, minitilesets, blockmaps):
   blocks = [make_tilemap_canvas(tm, tiles, cols=2, rows=2, pal_adjust=0, tile_modulo=0x1000) for tm in blockmap]
   return [b.pixmap(palettes) for b in blocks]
 
+def make_field_map_blocks_px2(rom, _zone, tilesets, minitilesets, blocksets):
+  *i_tiles, i_minitiles = _zone.tilesets
+  tiles = tilesets[i_tiles[0]] + tilesets[i_tiles[1]] + tilesets[i_tiles[2]]
+  tiles += minitilesets[i_minitiles]
+  blockset = blocksets[_zone.blockset]
+  blocks = [make_tilemap_canvas(tm, tiles, cols=2, rows=2, pal_adjust=0, tile_modulo=0x1000) for tm in blockset]
+  return [b.pixmap(_zone.palette) for b in blocks]
+
 def get_blockmaps(rom, start_address=0x0B0000, num=0x148):
   bank = 0x0B0000
   ptrs = [indirect(rom, start_address)+bank]
