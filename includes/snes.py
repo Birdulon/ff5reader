@@ -22,7 +22,8 @@ from includes.helpers import *
 from includes.snestile import *
 from collections import namedtuple
 
-zone = namedtuple('zone', 'npcs name shadowflags blockset tilesets blockmaps palette music')
+Zone = namedtuple('Zone', 'npcs name shadowflags blockset tilesets blockmaps palette music')
+Block = namedtuple('Block', 'priority0 priority1 all')
 
 def parse_zone(rom, id, start_address=0x0E9C00):
   ptr = start_address+(id*0x1A)
@@ -35,14 +36,14 @@ def parse_zone(rom, id, start_address=0x0E9C00):
               (tilesets_b & 0x000FC0) >> 6,
               (tilesets_b & 0x03F000) >> 12,
               (tilesets_b & 0xFC0000) >> 18]
-  pal_address = 0x03BB00 + (indirect(rom, ptr+0x16)<<8)
   blockmaps_b = indirect(rom, ptr+0xC, length=4)
   blockmaps = [(blockmaps_b & 0x000003FF) - 1,
               ((blockmaps_b & 0x000FFC00) >> 10) - 1,
               ((blockmaps_b & 0x3FF00000) >> 20) - 1]
+  pal_address = 0x03BB00 + (rom[ptr+0x16]<<8)
   palettes = [generate_palette(rom, pal_address+i*32, transparent=True) for i in range(8)]
   music = rom[ptr+0x19]
-  return zone(npcs, name, shadowflags, blockset, tilesets, blockmaps, palettes, music)
+  return Zone(npcs, name, shadowflags, blockset, tilesets, blockmaps, palettes, music)
 
 
 def make_battle_strip(rom, palette_address, tile_address, num_tiles, bpp=4):
@@ -167,14 +168,6 @@ def make_worldmap_chunk(rom, id, length=256):
     i += 1
   return chunk
 
-def make_worldmap_chunk_pixmap(rom, id, palette_address, tiles):
-  chunk = make_worldmap_chunk(rom, id)
-  palette = generate_palette(rom, palette_address, length=0x320, transparent=True)
-  canvas = Canvas_Indexed(len(chunk), 1, tilesize=16)
-  for i, c in enumerate(chunk):
-    canvas.draw_tile(i, 0, tiles[c])
-  return canvas.pixmap(palette)
-
 def make_worldmap_pixmap(rom, map_id, palette_address, tiles):
   id_offset = map_id*256
   palette = generate_palette(rom, palette_address, length=0x320, transparent=True)
@@ -249,27 +242,29 @@ def get_field_map_block_layouts(rom, id, start_address=0x0F0000):
   output = []
   for i in range(0, 0x200, 2):
     output.append([data[j+i+k] for j in range(0, 0x800, 0x200) for k in range(2)])
-  #for i in range(0, 0x800, 8):
-    #output.append([data[i+k] for k in range(8)])
   return output
 
-def make_field_map_blocks_px(rom, id, tilesets, minitilesets, blockmaps):
-  *i_tiles, i_minitiles, palettes = get_field_map_tiles(rom, id)
+def make_field_map_blocks_px(rom, zone, tilesets, minitilesets, blocksets):
+  *i_tiles, i_minitiles = zone.tilesets
   tiles = tilesets[i_tiles[0]] + tilesets[i_tiles[1]] + tilesets[i_tiles[2]]
   tiles += minitilesets[i_minitiles]
-  i_blockmap = rom[0x0E9C08 + (id * 0x1A)]
-  blockmap = blockmaps[i_blockmap]
+  blockset = blocksets[zone.blockset]
+  blocks = [Block(*[b.pixmap(zone.palette) for b in make_block(tm, tiles)]) for tm in blockset]
+  return blocks
 
-  blocks = [make_tilemap_canvas(tm, tiles, cols=2, rows=2, pal_adjust=0, tile_modulo=0x1000) for tm in blockmap]
-  return [b.pixmap(palettes) for b in blocks]
-
-def make_field_map_blocks_px2(rom, _zone, tilesets, minitilesets, blocksets):
-  *i_tiles, i_minitiles = _zone.tilesets
-  tiles = tilesets[i_tiles[0]] + tilesets[i_tiles[1]] + tilesets[i_tiles[2]]
-  tiles += minitilesets[i_minitiles]
-  blockset = blocksets[_zone.blockset]
-  blocks = [make_tilemap_canvas(tm, tiles, cols=2, rows=2, pal_adjust=0, tile_modulo=0x1000) for tm in blockset]
-  return [b.pixmap(_zone.palette) for b in blocks]
+def make_block(tilemap, tiles, cols=2, rows=2, tile_adjust=0, pal_adjust=0, tile_modulo=0x1000):
+  canvases = (Canvas_Indexed(cols, rows), Canvas_Indexed(cols, rows), Canvas_Indexed(cols, rows))
+  for i in range(len(tilemap)//2):
+    tile_index, p, h_flip, v_flip, priority = parse_tileset_word(tilemap[i*2:(i+1)*2])
+    x = i % cols
+    y = i //cols
+    try:
+      tile = tiles[(tile_index+tile_adjust)%tile_modulo]
+      canvases[priority].draw_tile(x, y, tile, h_flip, v_flip, p+pal_adjust)
+      canvases[2].draw_tile(x, y, tile, h_flip, v_flip, p+pal_adjust)
+    except BaseException as e:
+      print(e, p, hex(tile_index,2), hex(tile_adjust,2), hex(tile_index+tile_adjust,2))
+  return canvases
 
 def get_blockmaps(rom, start_address=0x0B0000, num=0x148):
   bank = 0x0B0000
@@ -289,6 +284,28 @@ def make_zone_pxs(blocks, blockmaps):
     for i, b in enumerate(bm):
       canvas.draw_pixmap(i%64, i//64, blocks[b])
     output.append(canvas.pixmap())
+  return output
+
+def make_zone_pxs2(blocks, blockmaps, zone):
+  output = []
+  layers = [None, None, None, None, None, None]  # bg1.0 bg1.1 bg2.0 bg2.1 bg3.0 bg3.1
+  order = [4, 2, 0, 3, 1, 5]  # Draw order from http://problemkaputt.de/fullsnes.htm#snespictureprocessingunitppu
+  for i, i_b in enumerate(zone.blockmaps):
+    if i_b == -1:
+      output.append(None)
+    else:
+      canvases = (Canvas(64, 64, tilesize=16), Canvas(64, 64, tilesize=16), Canvas(64, 64, tilesize=16))
+      for j, b in enumerate(blockmaps[i_b]):
+        canvases[0].draw_pixmap(j%64, j//64, blocks[b].priority0)
+        canvases[1].draw_pixmap(j%64, j//64, blocks[b].priority1)
+        canvases[2].draw_pixmap(j%64, j//64, blocks[b].all)
+      output.append(canvases[2].pixmap())
+      layers[i*2:(i+1)*2] = canvases[0:2]
+  canvas = Canvas(64, 64, tilesize=16)
+  for i in order:
+    if layers[i]:
+      canvas.draw_pixmap(0, 0, layers[i].pixmap())
+  output.append(canvas.pixmap())
   return output
 
 def decompress_battle_tilemap(rom, address):

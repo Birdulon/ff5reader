@@ -169,7 +169,7 @@ def make_px_table(items, cols=16, scale=4, large=False):
   for i, item in enumerate(items):
     if isinstance(item, QWidget):
       table.setCellWidget(i // cols, i % cols, item)
-    else:
+    elif item:
       lab = Label()
       lab.setContent(item, scale=scale)
       lab.setAlignment(QtCore.Qt.AlignCenter)
