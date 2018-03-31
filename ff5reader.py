@@ -97,19 +97,6 @@ if pyqt_version == 0:
               'Make sure you installed the PyQt4 package.')
         sys.exit(-1)
 
-with open(filename_en, 'rb') as file:
-    ROM_en = file.read()
-print(len(ROM_en), filename_en)
-with open(filename_jp, 'rb') as file:
-    ROM_jp = file.read()
-print(len(ROM_jp), filename_jp)
-with open(filename_jp_ff4, 'rb') as file:
-    ROM_FF4jp = file.read()
-print(len(ROM_FF4jp), filename_jp_ff4)
-with open(filename_jp_ff6, 'rb') as file:
-    ROM_FF6jp = file.read()
-print(len(ROM_FF6jp), filename_jp_ff6)
-
 
 class FF5Reader(QMainWindow):
   '''
@@ -118,6 +105,21 @@ class FF5Reader(QMainWindow):
   def __init__(self):
     QMainWindow.__init__(self, None)
     perfcount()
+    print('Reading ROMs')
+    with open(filename_en, 'rb') as file:
+      ROM_en = file.read()
+    print(len(ROM_en), filename_en)
+    with open(filename_jp, 'rb') as file:
+      ROM_jp = file.read()
+    print(len(ROM_jp), filename_jp)
+    with open(filename_jp_ff4, 'rb') as file:
+      ROM_FF4jp = file.read()
+    print(len(ROM_FF4jp), filename_jp_ff4)
+    with open(filename_jp_ff6, 'rb') as file:
+      ROM_FF6jp = file.read()
+    print(len(ROM_FF6jp), filename_jp_ff6)
+    perfcount()
+
     print('Generating Glyphs')
     self.glyph_sprites = {
       'glyphs_en_s': generate_glyphs(ROM_en, 0x11F000),
@@ -126,7 +128,7 @@ class FF5Reader(QMainWindow):
       'glyphs_jp_l': generate_glyphs_large(ROM_jp, 0x03E800),
       'glyphs_kanji': generate_glyphs_large(ROM_jp, 0x1BD000, 0x1AA),  # Kanji are unchanged in EN version
       }
-    make_string_img_list = functools.partial(_make_string_img_list, **self.glyph_sprites)
+    make_string_img_list = functools.partial(_make_string_img_list, ROM_en, ROM_jp, **self.glyph_sprites)
     perfcount()
 
     stringlist_headers = ['Address', 'ID', 'Name']
@@ -161,7 +163,7 @@ class FF5Reader(QMainWindow):
     zone_structure = [('NPC Layer',      2, None),  # 00 01
                       ('Name',           1, [z[2] for z in zone_names]),  # 02
                       ('ShadowFlags',    1, None),  # 03
-                      ('Graphic maths',        1, None),  # 04
+                      ('Graphic maths',  1, None),  # 04  - MSb animation-related, 6 LSbs are ID for table in 0x005BB8 which writes to $2131-$2133 (Color Math Designation, Subscreen BG color)
                       ('Tile properties',        1, None),  # 05
                       ('Flags '+hex(6),  1, None),  # 06
                       (hex(7),           1, None),  # 07
@@ -255,11 +257,14 @@ class FF5Reader(QMainWindow):
     blockmaps = get_blockmaps(ROM_jp)
     field_blocks = []
     zone_pxs = []
+    block_cache = {'misses': 0, 'p_hits': 0, 'i_hits': 0}
+    zone_px_cache = {'misses': 0, 'hits': 0}
     for z in zones:
-      blocks = make_field_map_blocks_px(ROM_jp, z, field_tiles, field_minitiles, field_blocksets)
-      field_blocks.append(stitch_tileset_px([b.all for b in blocks]))
-      #zone_pxs += make_zone_pxs(blocks, [blockmaps[b] for b in z.blockmaps if b!=-1])
-      zone_pxs += make_zone_pxs2(blocks, blockmaps, z)
+      blocks, miniblocks = make_field_map_blocks_px(ROM_jp, z, field_tiles, field_minitiles, field_blocksets, block_cache)
+      field_blocks.append(stitch_tileset_px([b.all for b in blocks+miniblocks]))
+      zone_pxs += make_zone_pxs(blocks, miniblocks, blockmaps, z, zone_px_cache)
+    print('Block cache results: {misses} misses, {p_hits} full hits, {i_hits} palette misses'.format(**block_cache))
+    print('Zone pixmap cache results: {misses} misses, {hits} hits'.format(**zone_px_cache))
     perfcount()
 
     print('Generating Battle backgrounds')
@@ -464,7 +469,7 @@ def make_string_img_large(bytestring, glyphs, glyphs_kanji, macros=None, jp=Fals
   return string, QPixmap.fromImage(img.copy(0, 0, xmax, y+16))
 
 
-def _make_string_img_list(start, length, num,
+def _make_string_img_list(rom_e, rom_j, start, length, num,
                           start_jp=None, len_jp=None, start_str=None, start_jp_str=None,
                           indirect=False, large=False, macros_en=None, macros_jp=None,
                           glyphs_en_s=None, glyphs_en_l=None,
@@ -480,13 +485,13 @@ def _make_string_img_list(start, length, num,
     for id in range(num):
       en = start + (id*length)
       jp = start_jp + (id*len_jp)
-      en_start = int.from_bytes(ROM_en[en:en+length],'little') + start_str
-      en_end = int.from_bytes(ROM_en[en+length:en+(length*2)],'little') + start_str
+      en_start = int.from_bytes(rom_e[en:en+length],'little') + start_str
+      en_end = int.from_bytes(rom_e[en+length:en+(length*2)],'little') + start_str
       if en_start >= 0xC00000:  # SNES memory space has the ROM starting at 0xC00000 in HiROM mode.
         en_start -= 0xC00000
         en_end -= 0xC00000
-      jp_start = int.from_bytes(ROM_jp[jp:jp+len_jp],'little') + start_jp_str
-      jp_end = int.from_bytes(ROM_jp[jp+len_jp:jp+(len_jp*2)],'little') + start_jp_str
+      jp_start = int.from_bytes(rom_j[jp:jp+len_jp],'little') + start_jp_str
+      jp_end = int.from_bytes(rom_j[jp+len_jp:jp+(len_jp*2)],'little') + start_jp_str
       if jp_start >= 0xC00000:  # SNES memory space has the ROM starting at 0xC00000 in HiROM mode.
         jp_start -= 0xC00000
         jp_end -= 0xC00000
@@ -494,17 +499,17 @@ def _make_string_img_list(start, length, num,
         break
       try:  # When dealing with pointer redirection we might end up passing empty strings
         if large:
-          str_en, img_en = make_string_img_large(ROM_en[en_start:en_end], glyphs_en_l,  glyphs_kanji, macros_en)
+          str_en, img_en = make_string_img_large(rom_e[en_start:en_end], glyphs_en_l,  glyphs_kanji, macros_en)
         else:
-          str_en, img_en = make_string_img_small(ROM_en[en_start:en_end], glyphs_en_s)
+          str_en, img_en = make_string_img_small(rom_e[en_start:en_end], glyphs_en_s)
       except ValueError:
         str_en = ''
         img_en = None
       try:
         if large:
-          str_jp, img_jp = make_string_img_large(ROM_jp[jp_start:jp_end], glyphs_jp_l, glyphs_kanji, macros_jp, jp=True)
+          str_jp, img_jp = make_string_img_large(rom_j[jp_start:jp_end], glyphs_jp_l, glyphs_kanji, macros_jp, jp=True)
         else:
-          str_jp, img_jp = make_string_img_small(ROM_jp[jp_start:jp_end], glyphs_jp_s, jp=True)
+          str_jp, img_jp = make_string_img_small(rom_j[jp_start:jp_end], glyphs_jp_s, jp=True)
       except ValueError:
         str_jp = ''
         img_jp = None
@@ -517,11 +522,11 @@ def _make_string_img_list(start, length, num,
       j1 = start + (id*length)
       j2 = start_jp + (id*len_jp)
       if large:
-        str_en, img_en = make_string_img_large(ROM_en[j1:j1+length], glyphs_en_l, glyphs_kanji, macros_en)
-        str_jp, img_jp = make_string_img_large(ROM_jp[j2:j2+len_jp], glyphs_jp_l, glyphs_kanji, macros_jp, jp=True)
+        str_en, img_en = make_string_img_large(rom_e[j1:j1+length], glyphs_en_l, glyphs_kanji, macros_en)
+        str_jp, img_jp = make_string_img_large(rom_j[j2:j2+len_jp], glyphs_jp_l, glyphs_kanji, macros_jp, jp=True)
       else:
-        str_en, img_en = make_string_img_small(ROM_en[j1:j1+length], glyphs_en_s)
-        str_jp, img_jp = make_string_img_small(ROM_jp[j2:j2+len_jp], glyphs_jp_s, jp=True)
+        str_en, img_en = make_string_img_small(rom_e[j1:j1+length], glyphs_en_s)
+        str_jp, img_jp = make_string_img_small(rom_j[j2:j2+len_jp], glyphs_jp_s, jp=True)
       stringlist.append([hex(j1, 6), hex(id, id_digits), str_en, img_en, str_jp, img_jp])
   return stringlist
 

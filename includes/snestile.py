@@ -254,12 +254,12 @@ class Canvas_Indexed:
     self.max_col = 1
     self.max_row = 1
 
-  def draw_tile(self, col, row, image, h_flip=False, v_flip=False, palette=0):
+  def draw_tile(self, col, row, image, h_flip=False, v_flip=False, palette=0, bpp=4):
     image = image.mirrored(h_flip, v_flip)
     imgbits = image.bits()
     imgbits.setsize(image.byteCount())
     if palette:
-      p = palette<<4
+      p = palette<<bpp
       imgbits[:] = bytes([int(i[0])|p for i in imgbits])
     x = col*self.tilesize
     y = row*self.tilesize
