@@ -191,6 +191,21 @@ def make_worldmap_pixmap(rom, map_id, palette_address, tiles):
       canvas.draw_tile(i, j, tiles[c])
   return canvas.pixmap(palette)
 
+def make_worldmap_pixmap2(rom, map_id, tiles):
+  '''
+  Batched version using QPainter.drawPixmapFragments
+  Tiles is a pixmap tilemap.
+  '''
+  id_offset = map_id*256
+  canvas = Canvas(256, 256, tilesize=16)
+  fragments = []
+  for j in range(256):
+    chunk = make_worldmap_chunk(rom, j+id_offset)
+    for i, c in enumerate(chunk):
+      fragments.append(make_pixmapfragment(c, i*16, j*16))
+  canvas.drawPixmapFragments(fragments, tiles)
+  return canvas.pixmap()
+
 def make_field_tiles(rom, id):
   tiles_address = indirect(rom, 0x1C2D84 + id*4, length=4) + 0x1C2E24
   return [create_tile_indexed(rom[tiles_address+i*32:tiles_address+i*32+32]) for i in range(256)]
@@ -212,7 +227,7 @@ def stitch_tileset(tiles):
   return canvas
 
 def stitch_tileset_px(tiles_px):
-  canvas = Canvas(16, len(tiles_px)//16)
+  canvas = Canvas(16, len(tiles_px)//16, tilesize=tiles_px[0].width())
   for i, tile in enumerate(tiles_px):
     canvas.draw_pixmap(i%16, i//16, tile)
   return canvas.pixmap()

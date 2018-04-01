@@ -228,7 +228,7 @@ class FF5Reader(QMainWindow):
     print('Generating map tiles')
     worldmap_palettes = [generate_palette(ROM_jp, 0x0FFCC0+(i*0x100), length=0x160, transparent=True) for i in range(3)]
     world_tiles = [make_worldmap_blocks(ROM_jp, 0x0FF0C0+(i*0x300), 0x1B8000+(i*0x2000), 0x0FF9C0+(i*0x100)) for i in range(3)]
-    worldpixmaps = [make_worldmap_pixmap(ROM_jp, i, 0x0FFCC0+(t*0x100), world_tiles[t]) for i, t in enumerate([0, 1, 0, 2, 2])]
+    #worldpixmaps = [make_worldmap_pixmap(ROM_jp, i, 0x0FFCC0+(t*0x100), world_tiles[t]) for i, t in enumerate([0, 1, 0, 2, 2])]
     world_blocks_pixmaps = []
     for i, tiles in enumerate(world_tiles):
       a = []
@@ -236,6 +236,8 @@ class FF5Reader(QMainWindow):
         t.setColorTable(worldmap_palettes[i])
         a.append(QPixmap.fromImage(t))
       world_blocks_pixmaps.append(a)
+    world_tile_stitches = [stitch_tileset_px(t) for t in world_blocks_pixmaps]
+    worldpixmaps = [make_worldmap_pixmap2(ROM_jp, i, world_tile_stitches[t]) for i, t in enumerate([0, 1, 0, 2, 2])]
     perfcount()
     worldmap_tiles = make_worldmap_tiles_pixmap(ROM_jp, 0x1B8000, 0x0FF9C0, 0x0FFCC0)
     worldmap_tiles += make_worldmap_tiles_pixmap(ROM_jp, 0x1BA000, 0x0FFAC0, 0x0FFDC0)

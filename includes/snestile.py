@@ -24,14 +24,14 @@ skip_pyqt5 = "PYQT4" in os.environ
 
 if not skip_pyqt5:
     try:
-        from PyQt5 import QtGui
+        from PyQt5 import QtGui, QtCore
         from PyQt5.QtGui import QImage, QPixmap, QColor, QPainter, QTransform
         pyqt_version = 5
     except ImportError:
         print("Missing PyQt5, trying PyQt4...")
 if pyqt_version == 0:
     try:
-        from PyQt4 import QtGui
+        from PyQt4 import QtGui, QtCore
         from PyQt4.QtGui import QImage, QPixmap, QColor, QPainter, QTransform
         pyqt_version = 4
     except ImportError:
@@ -211,6 +211,10 @@ def generate_palette(rom, offset, length=32, transparent=False):
     palette[0] = 0
   return palette
 
+def make_pixmapfragment(id, source_x, source_y):
+  pos = QtCore.QPoint(source_x, source_y)
+  source = QtCore.QRectF((id%16)*16, (id//16)*16, 16, 16)
+  return QtGui.QPainter.PixmapFragment.create(pos, source, 1, 1, 0, 1)
 
 class Canvas:
   def __init__(self, cols, rows, color=bg_trans, tilesize=8):
@@ -236,6 +240,9 @@ class Canvas:
       self.max_col = col
     if row > self.max_row:
       self.max_row = row
+
+  def drawPixmapFragments(self, *args, **kwargs):
+    self.painter.drawPixmapFragments(*args, **kwargs)
 
   def pixmap(self, trim=False):
     if trim:
