@@ -156,15 +156,16 @@ def make_table(headers, items, sortable=False, row_labels=True, scale=2):
   return table
 
 
-def make_px_table(items, cols=16, scale=4, large=False):
+def make_px_table(items, cols=16, scale=4, large=False, basicrows=False):
   rows = divceil(len(items), cols)
-  rd = hex_length(rows-1)+1
+  rd = hex_length(rows-1)+1 if basicrows else hex_length((rows*cols)-1)+1
   cd = hex_length(cols-1)
   table = QTableWidget(rows, cols)
   if large:
     table.setHorizontalScrollMode(QAbstractItemView.ScrollPerPixel)
     table.setVerticalScrollMode(QAbstractItemView.ScrollPerPixel)
-  table.setVerticalHeaderLabels([hex(v*cols, rd) for v in range(rows)])
+  rl = [hex(v, rd) for v in range(rows)] if basicrows else [hex(v*cols, rd) for v in range(rows)]
+  table.setVerticalHeaderLabels(rl)
   table.setHorizontalHeaderLabels([hex(v, cd) for v in range(cols)])
   for i, item in enumerate(items):
     if isinstance(item, QWidget):

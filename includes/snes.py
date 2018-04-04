@@ -202,17 +202,17 @@ def make_worldmap_pixmap2(rom, map_id, tiles):
   for j in range(256):
     chunk = make_worldmap_chunk(rom, j+id_offset)
     for i, c in enumerate(chunk):
-      fragments.append(make_pixmapfragment(c, i*16, j*16))
+      fragments.append(make_pixmapfragment(c, i, j))
   canvas.drawPixmapFragments(fragments, tiles)
   return canvas.pixmap()
 
 def make_field_tiles(rom, id):
   tiles_address = indirect(rom, 0x1C2D84 + id*4, length=4) + 0x1C2E24
-  return [create_tile_indexed(rom[tiles_address+i*32:tiles_address+i*32+32]) for i in range(256)]
+  return [create_tile_indexed(rom[tiles_address+i*32:tiles_address+(i+1)*32]) for i in range(256)]
 
 def make_field_minitiles(rom, id):
   tiles_address = indirect(rom, 0x1C0000 + id*2) + 0x1C0024
-  return [create_tile_indexed(rom[tiles_address+i*16:tiles_address+i*16+16]) for i in range(256)]
+  return [create_tile_indexed(rom[tiles_address+i*16:tiles_address+(i+1)*16]) for i in range(256)]
 
 def make_all_field_tiles(rom):
   return [make_field_tiles(rom, i) for i in range(40)]
@@ -221,9 +221,18 @@ def make_all_field_minitiles(rom):
   return [make_field_minitiles(rom, i) for i in range(18)]
 
 def stitch_tileset(tiles):
-  canvas = Canvas_Indexed(16, len(tiles)//16)
+  canvas = Canvas_Indexed(16, len(tiles)//16, tilesize=tiles[0].width())
   for i, tile in enumerate(tiles):
     canvas.draw_tile(i%16, i//16, tile)
+  return canvas
+
+def stitch_set(data):
+  '''
+  For stitching slabs of VRAM
+  '''
+  canvas = Canvas_Indexed(1, len(data), tilesize=data[0].width())
+  for i, d in enumerate(data):
+    canvas.draw_tile(0, i, d)
   return canvas
 
 def stitch_tileset_px(tiles_px):
@@ -288,6 +297,47 @@ def make_block(tilemap, tiles, cols=2, rows=2, tile_adjust=0, pal_adjust=0, tile
       print(e, tm.palette, hex(tm.tile,2), hex(tile_adjust,2), hex(tm.tile+tile_adjust,2))
   return canvases
 
+def make_field_map_blocks_px2(rom, zone, tilesets, minitilesets, blocksets, cache):
+  '''
+  Batched version.
+  '''
+  cache_key_i = '{} {}'.format(' '.join([str(i) for i in zone.tilesets]), zone.blockset)
+  cache_key_p = '{} {}'.format(cache_key_i, zone.pal)
+  if cache_key_p in cache:
+    cache['p_hits'] += 1
+    return cache[cache_key_p]
+  elif cache_key_i in cache:
+    cache['i_hits'] += 1
+    blocks, miniblocks = cache[cache_key_i]
+  else:
+    cache['misses'] += 1
+    *i_tiles, i_minitiles = zone.tilesets
+    tiles = tilesets[i_tiles[0]] + tilesets[i_tiles[1]] + tilesets[i_tiles[2]]
+    minitiles = minitilesets[i_minitiles]
+    blockset = blocksets[zone.blockset]
+    blockset_parsed = [[parse_tileset_word(tm[i*2:(i+1)*2]) for i in range(len(tm)//2)] for tm in blockset]
+    l = len(blockset_parsed)
+    blocks_l = [None]*l*3
+    for i, bs in enumerate(blockset_parsed):
+      blocks_l[i], blocks_l[i+l], blocks_l[i+(2*l)] = [b.image for b in make_block(bs, tiles)]
+    miniblocks_l = [None]*l*3
+    for i, bs in enumerate(blockset_parsed):
+      miniblocks_l[i], miniblocks_l[i+l], miniblocks_l[i+(2*l)] = [b.image for b in make_block(bs, minitiles, tile_modulo=len(minitiles))]
+    blocks = stitch_tileset(blocks_l)
+    miniblocks = stitch_tileset(miniblocks_l)
+    cache[cache_key_i] = (blocks, miniblocks)
+
+  blocks_px = blocks.pixmap(zone.palette)
+  miniblocks_px = miniblocks.pixmap(zone.palette)
+  cache[cache_key_p] = (blocks_px, miniblocks_px)
+  return blocks_px, miniblocks_px
+
+def get_blockmap(rom, address):
+  if rom[address] == 0:
+    return decompress_lzss(rom, address)
+  else:  # Special case - the entire map is one block type (e.g. water layer)
+    return [rom[address]]*0x1000
+
 def get_blockmaps(rom, start_address=0x0B0000, num=0x148):
   bank = 0x0B0000
   ptrs = [indirect(rom, start_address)+bank]
@@ -296,7 +346,7 @@ def get_blockmaps(rom, start_address=0x0B0000, num=0x148):
     if (ptr+bank) < ptrs[-1]:
       bank += 0x010000
     ptrs.append(ptr+bank)
-  blockmaps = [decompress_lzss(rom, ptr) for ptr in ptrs]
+  blockmaps = [get_blockmap(rom, ptr) for ptr in ptrs]
   return blockmaps
 
 def make_zone_pxs(blocks, miniblocks, blockmaps, zone, cache):
@@ -319,13 +369,58 @@ def make_zone_pxs(blocks, miniblocks, blockmaps, zone, cache):
           block = _blocks[b]
           canvases[0].draw_pixmap(j%64, j//64, block.priority0)
           canvases[1].draw_pixmap(j%64, j//64, block.priority1)
-          canvases[2].draw_pixmap(j%64, j//64, block.all)
+        canvases[2].draw_pixmap(0, 0, canvases[0].pixmap())
+        canvases[2].draw_pixmap(0, 0, canvases[1].pixmap())
         output.append(canvases[2].pixmap())
         layers[i*2:(i+1)*2] = canvases[0:2]
     canvas = Canvas(64, 64, tilesize=16)
     for i in order:
       if layers[i]:
         canvas.draw_pixmap(0, 0, layers[i].pixmap())
+    output.append(canvas.pixmap())
+    cache[cache_key] = output
+    return output
+
+def make_zone_pxs2(blocks, miniblocks, blockmaps, zone, cache):
+  '''
+  Batched version
+  blocks and miniblocks are a single pixmap each
+  '''
+  cache_key = '{} {} {}'.format(' '.join([str(i) for i in zone.blockmaps+zone.tilesets]), zone.blockset, zone.pal)
+  if cache_key in cache:
+    cache['hits'] += 1
+    return cache[cache_key]
+  else:
+    cache['misses'] += 1
+    output = []
+    layers = []  # bg1.0 bg1.1 bg2.0 bg2.1 bg3.0 bg3.1
+    order = [4, 2, 0, 3, 1, 5]  # Draw order from http://problemkaputt.de/fullsnes.htm#snespictureprocessingunitppu
+    for i, i_b in enumerate(zone.blockmaps):
+      if i_b == -1:
+        layers += [None, None]
+        output.append(None)
+      else:
+        canvases = (Canvas(64, 128, tilesize=16), Canvas(64, 64, tilesize=16))
+        _blocks = blocks if i < 2 else miniblocks
+        pxlist = []
+        append = pxlist.append
+        for j, b in enumerate(blockmaps[i_b]):
+          x = j%64
+          y = j//64
+          #append(make_pixmapfragment(b, x, y))
+          #append(make_pixmapfragment(b+0x100, x, y+64))
+          append(QtGui.QPainter.PixmapFragment.create(QtCore.QPoint(x*16, y*16), QtCore.QRectF((b%16)*16, (b//16)*16, 16, 16)))
+          append(QtGui.QPainter.PixmapFragment.create(QtCore.QPoint(x*16, y*16+1024), QtCore.QRectF((b%16)*16, (b//16)*16+0x100, 16, 16)))
+        canvases[0].drawPixmapFragments(pxlist, _blocks)
+        _layers = [canvases[0].pixmap(rect=(0, 0, 1024, 1024)), canvases[0].pixmap(rect=(0, 1024, 1024, 1024))]
+        canvases[1].draw_pixmap(0, 0, _layers[0])
+        canvases[1].draw_pixmap(0, 0, _layers[1])
+        output.append(canvases[1].pixmap())
+        layers += _layers
+    canvas = Canvas(64, 64, tilesize=16)
+    for i in order:
+      if layers[i]:
+        canvas.draw_pixmap(0, 0, layers[i])
     output.append(canvas.pixmap())
     cache[cache_key] = output
     return output

@@ -211,10 +211,11 @@ def generate_palette(rom, offset, length=32, transparent=False):
     palette[0] = 0
   return palette
 
-def make_pixmapfragment(id, source_x, source_y):
-  pos = QtCore.QPoint(source_x, source_y)
-  source = QtCore.QRectF((id%16)*16, (id//16)*16, 16, 16)
-  return QtGui.QPainter.PixmapFragment.create(pos, source, 1, 1, 0, 1)
+def make_pixmapfragment(id, target_col, target_row, tilesize=16):
+  return QtGui.QPainter.PixmapFragment.create(QtCore.QPoint(target_col*tilesize, target_row*tilesize), QtCore.QRectF((id%16)*tilesize, (id//16)*tilesize, tilesize, tilesize))
+
+def make_pixmapfragment2(source_x, source_y, target_x, target_y, tilesize=16):
+  return QtGui.QPainter.PixmapFragment.create(QtCore.QPoint(target_x, target_y), QtCore.QRectF(source_x, source_y, tilesize, tilesize))
 
 class Canvas:
   def __init__(self, cols, rows, color=bg_trans, tilesize=8):
@@ -224,6 +225,7 @@ class Canvas:
     self.painter = QtGui.QPainter(self.image)
     self.max_col = 1
     self.max_row = 1
+    self.batch = []
 
   def __del__(self):
     del self.painter
@@ -244,9 +246,18 @@ class Canvas:
   def drawPixmapFragments(self, *args, **kwargs):
     self.painter.drawPixmapFragments(*args, **kwargs)
 
-  def pixmap(self, trim=False):
+  def add_pixmapfragment(self, fragment):
+    self.batch.append(fragment)
+
+  def do_batch(self, pixmap):
+    self.painter.drawPixmapFragments(self.batch, pixmap)
+    self.batch = []
+
+  def pixmap(self, trim=False, rect=None):
     if trim:
       return QPixmap.fromImage(self.image.copy(0, 0, (self.max_col+1)*self.tilesize, (self.max_row+1)*self.tilesize))
+    if rect:
+      return QPixmap.fromImage(self.image.copy(*rect))
     return QPixmap.fromImage(self.image)
 
 

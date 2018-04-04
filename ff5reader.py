@@ -261,11 +261,16 @@ class FF5Reader(QMainWindow):
     zone_pxs = []
     block_cache = {'misses': 0, 'p_hits': 0, 'i_hits': 0}
     zone_px_cache = {'misses': 0, 'hits': 0}
-    for z in zones:
-      blocks, miniblocks = make_field_map_blocks_px(ROM_jp, z, field_tiles, field_minitiles, field_blocksets, block_cache)
+
+    fm_blocks = [make_field_map_blocks_px(ROM_jp, z, field_tiles, field_minitiles, field_blocksets, block_cache) for z in zones]
+    #fm_blocks = [make_field_map_blocks_px2(ROM_jp, z, field_tiles, field_minitiles, field_blocksets, block_cache) for z in zones]
+    print('Block cache results: {misses} misses, {p_hits} full hits, {i_hits} palette misses'.format(**block_cache))
+    perfcount()
+    for i, z in enumerate(zones):
+      blocks, miniblocks = fm_blocks[i]
       field_blocks.append(stitch_tileset_px([b.all for b in blocks+miniblocks]))
       zone_pxs += make_zone_pxs(blocks, miniblocks, blockmaps, z, zone_px_cache)
-    print('Block cache results: {misses} misses, {p_hits} full hits, {i_hits} palette misses'.format(**block_cache))
+      #zone_pxs += make_zone_pxs2(blocks, miniblocks, blockmaps, z, zone_px_cache)
     print('Zone pixmap cache results: {misses} misses, {hits} hits'.format(**zone_px_cache))
     perfcount()
 
@@ -321,7 +326,7 @@ class FF5Reader(QMainWindow):
     backgrounds_tab.addTab(make_px_table(worldpixmaps, cols=1, scale=1, large=True), 'Worldmaps')
     backgrounds_tab.addTab(make_px_table(fieldmap_tiles, cols=16, scale=1), 'Fieldmap Tiles')
     backgrounds_tab.addTab(make_px_table(field_blocks, cols=16, scale=1), 'Field Blocks')
-    backgrounds_tab.addTab(make_px_table(zone_pxs, cols=4, scale=1, large=1), 'Zone')
+    backgrounds_tab.addTab(make_px_table(zone_pxs, cols=4, scale=1, large=1, basicrows=True), 'Zone')
     backgrounds_tab.addTab(make_px_table(battle_bgs, cols=8, scale=1), 'Battle BGs')
 
     self.ff4widget.addTab(make_px_table(self.battle_strips_ff4, cols=16, scale=2), 'Character Battle Sprites')
