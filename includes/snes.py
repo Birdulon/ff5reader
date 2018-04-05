@@ -71,6 +71,23 @@ def make_battle_strip(rom, palette_address, tile_address, num_tiles, bpp=4):
     battle_strip.draw_pixmap(j%2, j//2, create_tile(rom[offset:offset+b], palette))
   return battle_strip.pixmap()
 
+def make_battle_strip2(rom, palette_address, tile_address, num_tiles, bpp=4):
+  '''
+  Makes strips using the tile layouts
+  '''
+  layout_address = 0x14B997
+  num_layouts = 11
+  if isinstance(palette_address, int):
+    palette = generate_palette(rom, palette_address, transparent=True)
+  else:
+    palette = palette_address
+  b = 24 if bpp==3 else 32
+  tiles = [create_tile(rom[offset:offset+b], palette) for offset in range(tile_address, tile_address+(b*num_tiles), b)]
+  battle_strip = Canvas(2, num_layouts*3)
+  for j, offset in enumerate(range(layout_address, layout_address+(num_layouts*6))):
+    battle_strip.draw_pixmap(j%2, j//2, tiles[rom[offset]])
+  return battle_strip.pixmap()
+
 def make_enemy_sprites(rom):
   sprites = []
   for e_id in range(0, 0x180*5, 5):
@@ -106,7 +123,8 @@ def make_character_battle_sprites(rom):
   palette_address = 0x14A3C0
   battle_strips = []
   for i in range(0, (22*5)*32, 32):  # 22 jobs 5 characters
-    battle_strips.append(make_battle_strip(rom, palette_address+i, tile_address+(i*48), 48))
+    #battle_strips.append(make_battle_strip(rom, palette_address+i, tile_address+(i*48), 48))
+    battle_strips.append(make_battle_strip2(rom, palette_address+i, tile_address+(i*48), 48))
   return battle_strips
 
 def make_character_status_sprites(rom):
@@ -480,6 +498,16 @@ def apply_battle_tilemap_flips(rom, id, tilemap):
   for i in range(len(tilemap)//2):
     output[i*2+1] |= (buffer[i] << 6)
   return bytes(output)
+
+def parse_OAM_word(data):
+  # Note that x has a ninth bit stored in the small OAM table (bits 1,3,5...)
+  x, y, a, b = data[:4]
+  tile_index = a|((b & 0x01) << 8)
+  palette = (b & 0x0E) >> 1
+  priority = (b & 0x30) >> 4
+  h_flip = (b & 0x40) >> 6
+  v_flip = (b & 0x80) >> 7
+  return x, y, TileMapping(tile_index, palette, h_flip, v_flip, priority)
 
 def parse_tileset_word(data):
   a, b = data[:2]
