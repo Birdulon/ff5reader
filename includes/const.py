@@ -232,6 +232,7 @@ BGM_Tracks = (
     "The Decisive Battle", "The Silent Beyond", "Dear Friends", "Final Fantasy",
     "A New Origin", "Chirping sound"
     )
+BGM_Tracks_Safe = [t.replace('/', '-') for t in BGM_Tracks]
 
 
 

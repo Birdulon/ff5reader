@@ -25,6 +25,7 @@ Trailing 8 bytes are 16 4bit nibbles that make up the compressed samples.
 import sys
 from midiutil import MIDIFile
 from includes.helpers import indirect, hex
+from includes.const import BGM_Tracks_Safe
 
 def generate_pointer_set(data):
   '''
@@ -125,7 +126,7 @@ class SPCParser:
       (2, 'SlideEchoVel'),        # 0xF6
       (2, 'unk2'),                # 0xF7
       (1, 'SetGlobalVel'),        # 0xF8
-      (3, 'EndLoopJump'),         # 0xF9
+      (3, self._end_loop_jump),   # 0xF9
       (2, self._jump),            # 0xFA
       (0, 'unk'),                 # 0xFB  does not end track
       (0, self._end_channel),     # 0xFC
@@ -173,15 +174,25 @@ class SPCParser:
     print('\tStarting loop level {} - repeat x{}'.format(len(self.loop_i), repeats))
     self.loop_i.append(self.i)
     self.loop_repeats.append(repeats)
+    self.loop_passes.append(1)
 
   def _end_loop(self):
-    print('\tEnding loop level {} - repeating x{}'.format(len(self.loop_i)-1, self.loop_repeats[-1]))
-    if self.loop_repeats[-1] > 0:
+    print('\tEnding loop level {} - pass {} of {}'.format(len(self.loop_i)-1, self.loop_passes[-1], self.loop_repeats[-1]+1))
+    if self.loop_passes[-1] < self.loop_repeats[-1]+1:
       self.i = self.loop_i[-1]
-      self.loop_repeats[-1] -= 1
+      self.loop_passes[-1] += 1
     else:
       self.loop_i.pop()
       self.loop_repeats.pop()
+      self.loop_passes.pop()
+
+  def _end_loop_jump(self, loop_pass, *address):
+    if self.loop_passes[-1] >= loop_pass:
+      print('\tEnding loop level {} with jump - pass {} of {}'.format(len(self.loop_i)-1, self.loop_passes[-1], self.loop_repeats[-1]+1))
+      self.loop_i.pop()
+      self.loop_repeats.pop()
+      self.loop_passes.pop()
+      self._jump(*address)
 
   def _jump(self, *address):
     '''
@@ -207,7 +218,7 @@ class SPCParser:
     print('Parsing')
     self.m = MIDIFile(len(tracks))
     self.velocity = 100
-    self.max_full_repeats = 2
+    self.max_full_repeats = 4
     self.track_end = []
     for track, (t, address) in enumerate(tracks):
       print('\nCreating track', track, hex(address, 6))
@@ -218,6 +229,7 @@ class SPCParser:
       self.transpose = 0
       self.loop_i = []
       self.loop_repeats = []
+      self.loop_passes = []
       self.full_repeats = 0
       self.i = 0
       while self.i < len(t):
@@ -251,7 +263,12 @@ def get_song_data(rom, id):
   offset = indirect(rom, lookup_offset, 3)-0xC00000
   bank = offset & 0xFF0000
   size = indirect(rom, offset)
-  track_ptrs = [indirect(rom, offset+i)+bank for i in range(2, 22, 2)]
+  def get_track_ptr(rom, offset, bank, i):
+    a = indirect(rom, offset+i) + bank
+    if a < offset:
+      a += 0x010000  # Bank shift
+    return a
+  track_ptrs = [get_track_ptr(rom, offset, bank, i) for i in range(2, 22, 2)]
   if track_ptrs[0] != track_ptrs[1]:
     print('Master is not channel 1, interesting', track_ptrs)
   tracks = [(rom[i:j], i) for i, j in zip(track_ptrs[1:-1], track_ptrs[2:])]
@@ -270,5 +287,14 @@ def read_rom(filename=filename_jp):
 
 if __name__ == '__main__':
     #main(sys.argv[1])
-    tracks = get_song_data(read_rom(), int(sys.argv[1]))
-    make_midi_file(tracks)
+    if len(sys.argv) > 1 and sys.argv[1]:
+      i = int(sys.argv[1])
+      filename = 'test {:02d} - {}.mid'.format(i, BGM_Tracks_Safe[i])
+      tracks = get_song_data(read_rom(), i)
+      make_midi_file(tracks, filename=filename)
+    else:
+      for i, t in enumerate(BGM_Tracks_Safe):
+        filename = 'test {:02d} - {}.mid'.format(i, t)
+        print('Creating MIDI {}'.format(filename))
+        tracks = get_song_data(read_rom(), i)
+        make_midi_file(tracks, filename=filename)
