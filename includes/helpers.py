@@ -15,7 +15,7 @@
   along with ff5reader.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
-HEX_PREFIX = '#'  # '$' or '0x' are also nice
+HEX_PREFIX = '#'  # '#' '$' or '0x' are also nice
 
 def divceil(numerator, denominator):
   '''

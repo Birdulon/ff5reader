@@ -24,7 +24,7 @@ Trailing 8 bytes are 16 4bit nibbles that make up the compressed samples.
 '''
 import sys
 from midiutil import MIDIFile
-from includes.helpers import indirect
+from includes.helpers import indirect, hex
 
 def generate_pointer_set(data):
   '''
@@ -80,21 +80,8 @@ def main(filename):
     print('0x{:04x}: {:4d}'.format(k, brr_dict[k]))
 
 
-filename_jp = 'Final Fantasy V (Japan).sfc'
-def get_song_data(rom, id):
-  lookup_offset = 0x043B97 + (id*3)
-  offset = indirect(rom, lookup_offset, 3)-0xC00000
-  bank = offset & 0xFF0000
-  size = indirect(rom, offset)
-  track_ptrs = [indirect(rom, offset+i)+bank for i in range(2, 22, 2)]
-  if track_ptrs[0] != track_ptrs[1]:
-    print('Master is not channel 1, interesting', track_ptrs)
-  tracks = [rom[i:j] for i, j in zip(track_ptrs[1:-1], track_ptrs[2:])]
-  #data = rom[offset+2:offset+2+size]
-  return tracks
-
-
 class SPCParser:
+  slide_resolution = 50
   notes = [i for i in range(12)]
   durations = [4, 3, 2, 4/3, 1.5, 1, 2/3, 0.75, 0.5, 1/3, 0.25, 0.5/3, 0.125, 0.25/3, 0.0625]
   def __init__(self):
@@ -103,7 +90,7 @@ class SPCParser:
       (2, self._slide_volume),    # 0xD3
       (1, self._set_pan),         # 0xD4
       (2, self._slide_pan),       # 0xD5
-      (1, 'SomeSlide'),           # 0xD6
+      (2, 'SomeSlide'),           # 0xD6
       (3, 'Vibrato'),             # 0xD7
       (0, 'VibratoOff'),          # 0xD8
       (3, 'Tremolo'),             # 0xD9
@@ -138,15 +125,20 @@ class SPCParser:
       (2, 'SlideEchoVel'),        # 0xF6
       (2, 'unk2'),                # 0xF7
       (1, 'SetGlobalVel'),        # 0xF8
-      (3, 'EndLoop2'),            # 0xF9
-      (0, 'unk'),                 # 0xFA
-      (0, 'unk'),                 # 0xFB
+      (3, 'EndLoopJump'),         # 0xF9
+      (2, self._jump),            # 0xFA
+      (0, 'unk'),                 # 0xFB  does not end track
       (0, self._end_channel),     # 0xFC
       (0, self._end_channel),     # 0xFD
       (0, self._end_channel),     # 0xFE
       (0, self._end_channel),     # 0xFF
       ]
-
+  def _add_slide(self, cc, value, time):
+    start_value = 0  # TODO: determine the value at this point!!!
+    t = 0
+    v = 0
+    # TODO linearly scale t from 0 to time, v from start_value to value over slide_resolution
+    self.m.addControllerEvent(self.track, 0, self.time + t, cc, start_value + v)
   def _set_instrument(self, instrument):
     self.m.addProgramChange(self.track, 0, self.time, instrument)
   def _set_volume(self, volume):
@@ -176,31 +168,60 @@ class SPCParser:
   def _slide_tempo(self, time, tempo):
     # TODO slide
     self.m.addTempo(self.track, self.time, tempo)
+
   def _start_loop(self, repeats):
-    print('Starting loop', repeats)
-    self.loop_i = self.i
-    self.repeats = repeats
+    print('\tStarting loop level {} - repeat x{}'.format(len(self.loop_i), repeats))
+    self.loop_i.append(self.i)
+    self.loop_repeats.append(repeats)
+
   def _end_loop(self):
-    print('Ending loop', self.repeats)
-    if self.repeats > 0:
-      self.i = self.loop_i
-    self.repeats -= 1
+    print('\tEnding loop level {} - repeating x{}'.format(len(self.loop_i)-1, self.loop_repeats[-1]))
+    if self.loop_repeats[-1] > 0:
+      self.i = self.loop_i[-1]
+      self.loop_repeats[-1] -= 1
+    else:
+      self.loop_i.pop()
+      self.loop_repeats.pop()
+
+  def _jump(self, *address):
+    '''
+    In gameplay, this would loop infinitely.
+    Since we're making finite MIDI files, we'll just loop track 0 a number of times,
+    and loop the other tracks until they match the length of track 0.
+    '''
+    offset = (address[0] + 256*address[1]) - self.start_address
+    if self.track == 0:
+      self.full_repeats += 1
+      if self.full_repeats < self.max_full_repeats:
+        self.i = offset
+      else:
+        self._end_channel()
+    else:
+      if self.time < self.track_end[0]-4:
+        self.i = offset
+      else:
+        self._end_channel()
 
 
   def parse(self, tracks):
     print('Parsing')
     self.m = MIDIFile(len(tracks))
     self.velocity = 100
-    for track, t in enumerate(tracks):
-      print('Creating track', track)
+    self.max_full_repeats = 2
+    self.track_end = []
+    for track, (t, address) in enumerate(tracks):
+      print('\nCreating track', track, hex(address, 6))
       self.track = track
+      self.start_address = address & 0xFFFF
       self.time = 0
       self.octave = 5
       self.transpose = 0
-      self.repeats = 0
-      self.loop_i = 0
+      self.loop_i = []
+      self.loop_repeats = []
+      self.full_repeats = 0
       self.i = 0
       while self.i < len(t):
+        add = 'Track {}:  {}\t{:7.3f}\t'.format(self.track, hex(self.i, 4), self.time)
         t1 = t[self.i]
         self.i += 1
         if t1 < 0xD2:
@@ -210,15 +231,32 @@ class SPCParser:
             note = self.notes[t2]+(12*self.octave)+self.transpose
             self.m.addNote(track, 0, note, self.time, duration, self.velocity)
           self.time += duration
+          print(add, hex(t1), t2, duration)
         else:
           n, callback = self.control_codes[t1-0xD2]
           args = [t[self.i+j] for j in range(n)]
           self.i += n
           if callable(callback):
+            print(add, callback.__name__, [hex(i) for i in [t1]+args])  # Maybe .__doc__ would work better
             callback(*args)
           else:
-            print(callback, '0x{:02x}'.format(t1))
+            print(add, callback, [hex(i) for i in [t1]+args])
+      self.track_end.append(self.time)
     return self.m
+
+
+filename_jp = 'Final Fantasy V (Japan).sfc'
+def get_song_data(rom, id):
+  lookup_offset = 0x043B97 + (id*3)
+  offset = indirect(rom, lookup_offset, 3)-0xC00000
+  bank = offset & 0xFF0000
+  size = indirect(rom, offset)
+  track_ptrs = [indirect(rom, offset+i)+bank for i in range(2, 22, 2)]
+  if track_ptrs[0] != track_ptrs[1]:
+    print('Master is not channel 1, interesting', track_ptrs)
+  tracks = [(rom[i:j], i) for i, j in zip(track_ptrs[1:-1], track_ptrs[2:])]
+  #data = rom[offset+2:offset+2+size]
+  return tracks
 
 def make_midi_file(tracks, filename='test.mid'):
   m = SPCParser().parse(tracks)
@@ -231,4 +269,6 @@ def read_rom(filename=filename_jp):
   return f
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    #main(sys.argv[1])
+    tracks = get_song_data(read_rom(), int(sys.argv[1]))
+    make_midi_file(tracks)
