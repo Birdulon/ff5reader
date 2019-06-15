@@ -273,6 +273,8 @@ class FF5Reader(QMainWindow):
       #zone_pxs += make_zone_pxs2(blocks, miniblocks, blockmaps, z, zone_px_cache)
     print('Zone pixmap cache results: {misses} misses, {hits} hits'.format(**zone_px_cache))
     perfcount()
+    del block_cache
+    del zone_px_cache
 
     print('Generating Battle backgrounds')
     battle_bgs = make_battle_backgrounds(ROM_jp)

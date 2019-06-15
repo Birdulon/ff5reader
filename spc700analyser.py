@@ -26,6 +26,8 @@ import sys
 from midiutil import MIDIFile
 from includes.helpers import indirect, hex
 from includes.const import BGM_Tracks_Safe
+import struct
+import wave
 
 def generate_pointer_set(data):
   '''
@@ -51,14 +53,27 @@ def analyse_sample(data, pointer):
 
 
 def decode_brr(data):
-  range = data[0] >> 4
+  '''
+  Decodes a single 9byte BRR packet
+  '''
+  _range = data[0] >> 4
   filter_designation = (data[0] & 0x0C) >> 2
   loop = bool(data[0] & 0x02)
   end = bool(data[0] & 0x01)
   samples = []
-  for i in range(8):
-    samples.append((data[1+range] >> 4) << range)
-    samples.append((data[1+range] & 0x0F) << range)
+  for i in data[1:]:
+    b1 = (i >> 4)
+    b2 = (i & 0x0F)
+    # Sign-extend
+    if b1 >= 8:
+      b1 |= 0xFFF0
+    if b2 >= 8:
+      b2 |= 0xFFF0
+    samples.append((b1 << _range) & 0xFFFF)
+    samples.append((b2 << _range) & 0xFFFF)
+  # For filter arithmetic the samples need to be in signed form.
+  sample_bytes = struct.pack('<'+'H'*16, *samples)
+  samples = struct.unpack('<'+'h'*16, sample_bytes)
   return (samples, loop, end, filter_designation)
 
 
@@ -274,6 +289,46 @@ def get_song_data(rom, id):
   tracks = [(rom[i:j], i) for i, j in zip(track_ptrs[1:-1], track_ptrs[2:])]
   #data = rom[offset+2:offset+2+size]
   return tracks
+
+def get_sample_data(rom, id):
+  lookup_offset = 0x043C6F + (id*3)
+  offset = indirect(rom, lookup_offset, 3)-0xC00000
+  size = indirect(rom, offset)
+  data = rom[offset+2:offset+2+size]
+  return data
+
+def clamp_short(num):
+  return min(max(num, -0x7FFF), 0x7FFF)
+
+def make_sample(rom, id):
+  data = get_sample_data(rom, id)
+  packets = [data[i:i+9] for i in range(0, len(data), 9)]
+  samples = [0, 0]  # Two zero samples for filter purposes, strip them from the actual output
+  for p in packets:
+    c_samples, loop, end, filter = decode_brr(p)
+    samples += c_samples
+    if filter == 1:
+      for i in range(-8, 0, 1):
+        samples[i] = clamp_short(samples[i] + (samples[i-1]*15)//16)
+    elif filter == 2:
+      for i in range(-8, 0, 1):
+        samples[i] = clamp_short(samples[i] + (samples[i-1]*61)//32 - (samples[i-2]*15)//16 )
+    elif filter == 3:
+      for i in range(-8, 0, 1):
+        samples[i] = clamp_short(samples[i] + (samples[i-1]*115)//64 - (samples[i-2]*13)//16 )
+    if end:
+      break
+  return samples[2:]
+
+def make_sample_wav(rom, id):
+  samples = make_sample(rom, id)
+  filename = 'Sample{}.wav'.format(id)
+  with wave.open(filename, 'wb') as file:
+    file.setnchannels(1)
+    file.setframerate(8000)
+    file.setsampwidth(2)
+    sample_bytes = struct.pack('<'+'h'*len(samples), *samples)
+    file.writeframes(sample_bytes)
 
 def make_midi_file(tracks, filename='test.mid'):
   m = SPCParser().parse(tracks)
