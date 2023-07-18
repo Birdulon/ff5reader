@@ -96,7 +96,7 @@ class Label(QLabel):
     elif isinstance(content, list) and isinstance(content[0], QPixmap):
       self.pixmaps = [c.scaled(c.size() * scale) for c in content[:-1]]
       self.setPixmap(self.pixmaps[0])
-      self.timer.start(content[-1]*1000/60)
+      self.timer.start(content[-1]*1000//60)
     else:
       if strip:
         content = content.strip()

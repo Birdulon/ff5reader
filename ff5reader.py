@@ -136,6 +136,7 @@ class FF5Reader(QMainWindow):
 
     print('Generating Strings')
     zone_names = make_string_img_list(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200, indirect=True, large=True)
+    menu_strings = make_string_img_list(0xF987, 2, 139, start_str=0x270000, start_jp_str=0x0000, indirect=True)
     items = make_string_img_list(0x111380, 9, 256)
     magics = make_string_img_list(0x111C80, 6, 87)
     more_magics = make_string_img_list(0x111E8A, 9, 73)
@@ -344,6 +345,7 @@ class FF5Reader(QMainWindow):
     structs_tab.addTab(make_table(const.npc_layer_headers, npc_layers, True), 'NPC Layers')
     structs_tab.addTab(make_table(enemy_sprite_headers, enemy_sprite_data, True), 'Enemy Sprites')
 
+    strings_tab.addTab(make_table(imglist_headers, menu_strings, row_labels=False), 'Menu Strings')
     strings_tab.addTab(make_table(imglist_headers, items, row_labels=False), 'Items')
     strings_tab.addTab(make_table(imglist_headers, magics+more_magics, row_labels=False), 'Magics')
     #strings_tab.addTab(make_table(imglist_headers, more_magics, row_labels=False), 'More Magics')
