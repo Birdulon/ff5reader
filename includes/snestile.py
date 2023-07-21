@@ -17,7 +17,7 @@
 import os
 from array import array
 from struct import unpack
-import includes.const as const
+import includes.ff5.const as ff5const
 
 pyqt_version = 0
 skip_pyqt5 = "PYQT4" in os.environ
@@ -155,7 +155,7 @@ def create_tritile(data):
   img = QImage(16, 12, QImage.Format_Indexed8)
   imgbits = img.bits()
   imgbits.setsize(img.byteCount())
-  img.setColorTable(const.dialogue_palette)
+  img.setColorTable(ff5const.dialogue_palette)
   tile = array('B', range(192))
   for p, row, b in [(p,j,b) for p in range(2) for j in range(12) for b in reversed(range(8))]:
     tile[(7-b) + (row*16) + (p*8)] = (data[row + (p*12)] >> b & 1)
@@ -177,7 +177,7 @@ def create_quadtile(data, ltr=False):
   del painter
   return QPixmap.fromImage(img)
 
-def generate_glyphs(rom, offset, num=0x100, palette=const.small_palette):
+def generate_glyphs(rom, offset, num=0x100, palette=ff5const.small_palette):
   spritelist = []
   for i in range(num):
     j = offset + (i*16)

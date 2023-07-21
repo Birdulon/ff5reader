@@ -23,6 +23,7 @@ from itertools import chain
 from array import array
 import time
 import functools
+from typing import Iterable
 
 from includes.helpers import *
 from includes.qthelpers import *
@@ -34,12 +35,13 @@ from includes.snestile import (
   Canvas, Canvas_Indexed
   )
 from includes.snes import *
-import includes.const as const
+import includes.ff5.const as const
+from includes.ff5.strings import StringBlock, RPGe_Dialogue_Width
+from includes.ff5.strings import Strings as FFVStrings
 import includes.ff4 as ff4
+import includes.ff5 as ff5
 import includes.ff6 as ff6
 
-filename_en = 'Final Fantasy V (Japan) [En by RPGe v1.1].sfc'
-filename_jp = 'Final Fantasy V (Japan).sfc'
 filename_jp_ff4 = 'Final Fantasy IV (Japan) (Rev A).sfc'
 filename_jp_ff6 = 'Final Fantasy VI (Japan).sfc'
 
@@ -53,17 +55,11 @@ class FF5Reader(QMainWindow):
     QMainWindow.__init__(self, None)
     perfcount()
     print('Reading ROMs')
-    with open(filename_en, 'rb') as file:
-      ROM_en = file.read()
-    print(len(ROM_en), filename_en)
-    with open(filename_jp, 'rb') as file:
-      ROM_jp = file.read()
-    print(len(ROM_jp), filename_jp)
-    with open(filename_jp_ff4, 'rb') as file:
-      ROM_FF4jp = file.read()
+    ROM_en = ff5.files.ROM_RPGe
+    ROM_jp = ff5.files.ROM_SNES
+    ROM_FF4jp = load_raw(filename_jp_ff4)
+    ROM_FF6jp = load_raw(filename_jp_ff6)
     print(len(ROM_FF4jp), filename_jp_ff4)
-    with open(filename_jp_ff6, 'rb') as file:
-      ROM_FF6jp = file.read()
     print(len(ROM_FF6jp), filename_jp_ff6)
     perfcount()
 
@@ -75,61 +71,14 @@ class FF5Reader(QMainWindow):
       'glyphs_jp_l': generate_glyphs_large(ROM_jp, 0x03E800),
       'glyphs_kanji': generate_glyphs_large(ROM_jp, 0x1BD000, 0x1AA),  # Kanji are unchanged in EN version
       }
-    make_string_img_list = functools.partial(_make_string_img_list, ROM_en, ROM_jp, **self.glyph_sprites)
+    make_string_img_list = functools.partial(_make_string_img_list, **self.glyph_sprites)
     perfcount()
 
-    stringlist_headers = ['Address', 'ID', 'Name']
-    imglist_headers = stringlist_headers + ['Img', 'Name JP', 'Img JP']
+    imglist_headers = ['ID', 'EN Pointer', 'EN Address', 'EN String', 'EN Img', 'JP Pointer', 'JP Address', 'JP String', 'JP Img']
 
-    print('Generating Strings')
-    zone_names = make_string_img_list(0x107000, 2, 0x100, start_str=0x270000, start_jp_str=0x107200, indirect=True, large=True)
-    menu_strings = make_string_img_list(0xF987, 2, 139, start_str=0x270000, start_jp_str=0x0000, indirect=True)
-    items = make_string_img_list(0x111380, 9, 256)
-    magics = make_string_img_list(0x111C80, 6, 87)
-    more_magics = make_string_img_list(0x111E8A, 9, 73)
-    enemy_names = make_string_img_list(0x200050, 10, 0x180, 0x105C00, 8)
-    character_names = make_string_img_list(0x115500, 6, 5)
-    job_names = make_string_img_list(0x115600, 8, 22)
-    ability_names = make_string_img_list(0x116200, 8, 33)
-    battle_commands = make_string_img_list(0x201150, 7, 0x60, 0x115800, 5)
+    print('Generating String Images')
+    string_images = {k: make_string_img_list(*FFVStrings.blocks_SNES_RPGe[k], large=config.get('dialog')) for k,config in FFVStrings.config.items()}
     perfcount()
-    dialogue = make_string_img_list(0x2013F0, 3, 0x900, start_jp=0x082220, len_jp=2, start_str=0x0, start_jp_str=0x0A0000, indirect=True, large=True, macros_en=const.Dialogue_Macros_EN, macros_jp=const.Dialogue_Macros_JP)
-    perfcount()
-
-    def split_tilesets(data):
-      tilesets = [(data & 0x00003F),
-                  (data & 0x000FC0) >> 6,
-                  (data & 0x03F000) >> 12,
-                  (data & 0xFC0000) >> 18]
-      return ' '.join([hex(i,2) for i in tilesets])
-    def split_blockmaps(data):
-      blockmaps = [(data & 0x000003FF) - 1,
-                  ((data & 0x000FFC00) >> 10) - 1,
-                  ((data & 0x3FF00000) >> 20) - 1]
-      return ' '.join([hex(i,3) for i in blockmaps])
-
-    zone_structure = [('NPC Layer',      2, None),  # 00 01
-                      ('Name',           1, [z[2] for z in zone_names]),  # 02
-                      ('ShadowFlags',    1, None),  # 03
-                      ('Graphic maths',  1, None),  # 04  - MSb animation-related, 6 LSbs are ID for table in 0x005BB8 which writes to $2131-$2133 (Color Math Designation, Subscreen BG color)
-                      ('Tile properties',        1, None),  # 05
-                      ('Flags '+hex(6),  1, None),  # 06
-                      (hex(7),           1, None),  # 07
-                      ('Blockset',       1, None),  # 08
-                      ('Tilesets',       3, split_tilesets),  # 09 0A 0B
-                      ('Blockmaps',      4, split_blockmaps),  # 0C 0D 0E 0F
-                      (hex(16),          1, None),  # 10
-                      (hex(17),          1, None),  # 11
-                      (hex(18),          1, None),  # 12
-                      (hex(19),          1, None),  # 13
-                      (hex(20),          1, None),  # 14
-                      (hex(21),          1, None),  # 15
-                      ('Palette',        1, None),  # 16
-                      (hex(23),          1, None),  # 17
-                      (hex(24),          1, None),  # 18
-                      ('Music',          1, const.BGM_Tracks)]  # 19
-    zone_headers = ['Address'] + [z[0] for z in zone_structure]
-    zone_data = [parse_struct(ROM_en, 0x0E9C00 + (i*0x1A), zone_structure) for i in range(const.zone_count)]
 
     battle_bg_structure = [('Tileset',     1, None),
                            ('Palette 1',   1, None),
@@ -170,7 +119,7 @@ class FF5Reader(QMainWindow):
     enemy_sprite_headers = ['Address']+[i[0] for i in enemy_sprite_structure]+['EN Name','EN Name']
     address = 0x14B180
     for i in range(0x180):
-      enemy_sprite_data.append(parse_struct(ROM_en, address + (i*5), enemy_sprite_structure) + enemy_names[i][2:4])
+      enemy_sprite_data.append(parse_struct(ROM_en, address + (i*5), enemy_sprite_structure) + string_images['enemy_names'][i][3:5])
 
     perfcount()
     print('Generating map tiles')
@@ -286,23 +235,22 @@ class FF5Reader(QMainWindow):
     self.ff6widget.addTab(make_px_table(self.portraits_ff6, cols=19, scale=2), 'Character Portraits')
 
 
-    structs_tab.addTab(make_table(zone_headers, zone_data, True), 'Zones')
+    structs_tab.addTab(make_table(ff5.ZoneData.zone_headers, ff5.ZoneData.get_data(), True), 'Zones')
     structs_tab.addTab(make_table(tileset_headers, tileset_data, True), 'Tilesets')
     structs_tab.addTab(make_table(battle_bg_headers, battle_bg_data, True), 'BattleBGs')
     structs_tab.addTab(make_table(const.npc_layer_headers, npc_layers, True), 'NPC Layers')
     structs_tab.addTab(make_table(enemy_sprite_headers, enemy_sprite_data, True), 'Enemy Sprites')
 
-    strings_tab.addTab(make_table(imglist_headers, menu_strings, row_labels=False), 'Menu Strings')
-    strings_tab.addTab(make_table(imglist_headers, items, row_labels=False), 'Items')
-    strings_tab.addTab(make_table(imglist_headers, magics+more_magics, row_labels=False), 'Magics')
-    #strings_tab.addTab(make_table(imglist_headers, more_magics, row_labels=False), 'More Magics')
-    strings_tab.addTab(make_table(imglist_headers, enemy_names, row_labels=False), 'Enemy Names')
-    strings_tab.addTab(make_table(imglist_headers, character_names, row_labels=False), 'Character Names')
-    strings_tab.addTab(make_table(imglist_headers, job_names, row_labels=False), 'Job Names')
-    strings_tab.addTab(make_table(imglist_headers, ability_names, row_labels=False), 'Ability Names')
-    strings_tab.addTab(make_table(imglist_headers, battle_commands, row_labels=False), 'Battle Commands')
-    strings_tab.addTab(make_table(imglist_headers, zone_names, True, scale=1), 'Zone Names')
-    strings_tab.addTab(make_table(imglist_headers+['JP address'], dialogue, scale=1), 'Dialogue')
+    strings_tab.addTab(make_table(imglist_headers, string_images['menu_strings'], row_labels=False), 'Menu Strings')
+    strings_tab.addTab(make_table(imglist_headers, string_images['items'], row_labels=False), 'Items')
+    strings_tab.addTab(make_table(imglist_headers, string_images['magics']+string_images['magics2'], row_labels=False), 'Magics')
+    strings_tab.addTab(make_table(imglist_headers, string_images['enemy_names'], row_labels=False), 'Enemy Names')
+    strings_tab.addTab(make_table(imglist_headers, string_images['character_names'], row_labels=False), 'Character Names')
+    strings_tab.addTab(make_table(imglist_headers, string_images['job_names'], row_labels=False), 'Job Names')
+    strings_tab.addTab(make_table(imglist_headers, string_images['ability_names'], row_labels=False), 'Ability Names')
+    strings_tab.addTab(make_table(imglist_headers, string_images['battle_commands'], row_labels=False), 'Battle Commands')
+    strings_tab.addTab(make_table(imglist_headers, string_images['zone_names'], True, scale=1), 'Zone Names')
+    strings_tab.addTab(make_table(imglist_headers, string_images['dialogue'], scale=1), 'Dialogue')
 
     self.string_decoder = QWidget()
     self.decoder_input = QLineEdit()
@@ -337,19 +285,17 @@ class FF5Reader(QMainWindow):
 The painting logic here needs to be moved into includes.snestile at some point.
 Once that is done, these functions will be moved to includes.snes which should not have qt dependencies.
 '''
-def make_string_img_small(bytestring, glyphs, jp=False):
+def make_string_img_small(bytestring: Iterable[int], glyphs, handle_dakuten=False):
   '''
   JP version is not as fancy as this with dakuten, it just puts them on the row above and clips.
   '''
   if len(bytestring) < 1:
-    raise ValueError('Empty bytestring was passed')
-  string = ''
+    return None
   img = QImage(len(bytestring)*8, 10, QImage.Format_RGB16)
   img.fill(bg_color)
   painter = QtGui.QPainter(img)
-  if jp:
+  if handle_dakuten:
     for x, j in enumerate(bytestring):
-      string = string + const.Glyphs_JP2[j]
       if 0x20 <= j < 0x52:
         if j > 0x48:
           painter.drawPixmap(x*8, 2, glyphs[j+0x17])
@@ -361,33 +307,20 @@ def make_string_img_small(bytestring, glyphs, jp=False):
         painter.drawPixmap(x*8, 2, glyphs[j])
   else:
     for x, j in enumerate(bytestring):
-      string = string + const.Glyphs[j]
       painter.drawPixmap(x*8, 1, glyphs[j])
   del painter
-  return string, QPixmap.fromImage(img)
+  return QPixmap.fromImage(img)
 
 
-def make_string_img_large(bytestring, glyphs, glyphs_kanji, macros=None, jp=False):
+def make_string_img_large(glyph_ids: Iterable[int], glyphs, glyphs_kanji=None):
   '''
   This is how we decipher dialogue data, which has multiple lines, macro expansions and kanji.
   English characters have varying widths. In the japanese version, everything is fullwidth (16px)
   Kanji aren't used in English dialogue but the cost is likely the same in checking either way.
   '''
-  if len(bytestring) < 1:
-    raise ValueError('Empty bytestring was passed')
+  if len(glyph_ids) < 1:
+    return None
 
-  newstring = []
-  bytes = iter(bytestring)
-  for b in bytes:
-    if b in const.DoubleChars:
-      b2 = next(bytes)
-      newstring.append((b<<8) + b2)
-    elif macros and b in macros:
-      newstring.extend(macros[b])
-    else:
-      newstring.append(b)
-
-  string = ''
   # Because the length of the input has little bearing on the size of the image thanks to linebreaks and macros, we overprovision then clip away.
   max_width = 256  # This seems to check out, but the EN dialogue has linebreaks virtually everywhere anyway
   max_height = 1024  # I've seen up to 58 rows in EN, 36 in JP. Stay safe.
@@ -396,96 +329,63 @@ def make_string_img_large(bytestring, glyphs, glyphs_kanji, macros=None, jp=Fals
   painter = QtGui.QPainter(img)
 
   x = xmax = y = 0
-  for j in newstring:
-    if x >= max_width:  # Wrap on long line
-      string += '[wr]\n'
-      xmax = max_width  # Can't go higher than this anyway
-      x = 0
-      y += 16
-    if j == 0x01:  # Line break
-      string += '[br]\n'
-      xmax = x if x > xmax else xmax
-      x = 0
-      y += 16
-    elif 0x1E00 <= j < 0x1FAA:  # Kanji live in this range
-      string += const.Glyphs_Kanji[j-0x1E00]
-      painter.drawPixmap(x, y+2, glyphs_kanji[j-0x1E00])
-      x += 16
-    elif j < 0x13 or j > 0xFF:  # Everything remaining outside this is a control char
-      string += '[0x{:02X}]'.format(j)
-    else:
-      if jp:
-        string += const.Glyphs_JP_large[j]
+  if glyphs_kanji is not None:  # jp
+    for j in glyph_ids:
+      if x >= max_width:  # Wrap on long line
+        xmax = max_width  # Can't go higher than this anyway
+        x = 0
+        y += 16
+
+      if j == 0x01:  # Line break
+        xmax = x if x > xmax else xmax
+        x = 0
+        y += 16
+      elif 0x1E00 <= j < 0x1FAA:  # Kanji live in this range
+        painter.drawPixmap(x, y+2, glyphs_kanji[j-0x1E00])
+        x += 16
+      elif 0x13 <= j <= 0xFF:  # Everything remaining outside this is a control char
         painter.drawPixmap(x, y+2, glyphs[j])
         x += 16
-      else:
-        string += const.Glyphs[j]
+  else:  # en
+    for j in glyph_ids:
+      if x >= max_width:  # Wrap on long line
+        xmax = max_width  # Can't go higher than this anyway
+        x = 0
+        y += 16
+
+      if j == 0x01:  # Line break
+        xmax = x if x > xmax else xmax
+        x = 0
+        y += 16
+      elif 0x13 <= j <= 0xFF:  # Everything outside this is a control char
         painter.drawPixmap(x, y+4, glyphs[j])
-        x += const.Dialogue_Width[j]
+        x += RPGe_Dialogue_Width[j]
+
   del painter
   xmax = x if x > xmax else xmax
-  return string, QPixmap.fromImage(img.copy(0, 0, xmax, y+16))
+  return QPixmap.fromImage(img.copy(0, 0, xmax, y+16))
 
 
-def _make_string_img_list(rom_e, rom_j, start, length, num,
-                          start_jp=None, len_jp=None, start_str=None, start_jp_str=None,
-                          indirect=False, large=False, macros_en=None, macros_jp=None,
+def _make_string_img_list(jp: StringBlock, en: StringBlock, large=False,
                           glyphs_en_s=None, glyphs_en_l=None,
                           glyphs_jp_s=None, glyphs_jp_l=None, glyphs_kanji=None):
-  start_jp = start if start_jp is None else start_jp
-  len_jp = length if len_jp is None else len_jp
-  start_str = start if start_str is None else start_str
-  start_jp_str = start_str if start_jp_str is None else start_jp_str
+  num = len(en)
+  print(len(en), len(jp))
   stringlist = []
   id_digits = hex_length(num-1)
 
-  if indirect:
-    for id in range(num):
-      en = start + (id*length)
-      jp = start_jp + (id*len_jp)
-      en_start = int.from_bytes(rom_e[en:en+length],'little') + start_str
-      en_end = int.from_bytes(rom_e[en+length:en+(length*2)],'little') + start_str
-      if en_start >= 0xC00000:  # SNES memory space has the ROM starting at 0xC00000 in HiROM mode.
-        en_start -= 0xC00000
-        en_end -= 0xC00000
-      jp_start = int.from_bytes(rom_j[jp:jp+len_jp],'little') + start_jp_str
-      jp_end = int.from_bytes(rom_j[jp+len_jp:jp+(len_jp*2)],'little') + start_jp_str
-      if jp_start >= 0xC00000:  # SNES memory space has the ROM starting at 0xC00000 in HiROM mode.
-        jp_start -= 0xC00000
-        jp_end -= 0xC00000
-      if (en_end == start_str) or (jp_end == start_jp_str):
-        break
-      try:  # When dealing with pointer redirection we might end up passing empty strings
-        if large:
-          str_en, img_en = make_string_img_large(rom_e[en_start:en_end], glyphs_en_l,  glyphs_kanji, macros_en)
-        else:
-          str_en, img_en = make_string_img_small(rom_e[en_start:en_end], glyphs_en_s)
-      except ValueError:
-        str_en = ''
-        img_en = None
-      try:
-        if large:
-          str_jp, img_jp = make_string_img_large(rom_j[jp_start:jp_end], glyphs_jp_l, glyphs_kanji, macros_jp, jp=True)
-        else:
-          str_jp, img_jp = make_string_img_small(rom_j[jp_start:jp_end], glyphs_jp_s, jp=True)
-      except ValueError:
-        str_jp = ''
-        img_jp = None
-      stringlist.append([
-        hex(en, 6), hex(id, id_digits),
-        str_en, img_en, str_jp, img_jp, hex(jp_start, 6)
-        ])
-  else:
-    for id in range(num):
-      j1 = start + (id*length)
-      j2 = start_jp + (id*len_jp)
-      if large:
-        str_en, img_en = make_string_img_large(rom_e[j1:j1+length], glyphs_en_l, glyphs_kanji, macros_en)
-        str_jp, img_jp = make_string_img_large(rom_j[j2:j2+len_jp], glyphs_jp_l, glyphs_kanji, macros_jp, jp=True)
-      else:
-        str_en, img_en = make_string_img_small(rom_e[j1:j1+length], glyphs_en_s)
-        str_jp, img_jp = make_string_img_small(rom_j[j2:j2+len_jp], glyphs_jp_s, jp=True)
-      stringlist.append([hex(j1, 6), hex(id, id_digits), str_en, img_en, str_jp, img_jp])
+  for id in range(num):
+    str_en = en.decoded[id]
+    str_jp = jp.decoded[id]
+    if large:
+      img_en = make_string_img_large(en.glyphs[id], glyphs_en_l)
+      img_jp = make_string_img_large(jp.glyphs[id], glyphs_jp_l, glyphs_kanji)
+    else:
+      img_en = make_string_img_small(en.glyphs[id], glyphs_en_s)
+      img_jp = make_string_img_small(jp.glyphs[id], glyphs_jp_s, handle_dakuten=True)
+      # ['ID', 'EN Pointer', 'EN Address', 'EN String', 'EN Img', 'JP Pointer', 'JP Address', 'JP String', 'JP Img']
+    stringlist.append([hex(id, id_digits), hex(en.pointer_address[id].start, 6), hex(en.string_address[id].start, 6), str_en, img_en,
+                                           hex(jp.pointer_address[id].start, 6), hex(jp.string_address[id].start, 6), str_jp, img_jp])
   return stringlist
 
 last_perfcount = None

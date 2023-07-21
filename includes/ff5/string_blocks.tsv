@@ -1,0 +1,12 @@
+name	num_entries	address	snes_address	bytes	snes_bytes	rpge_ptr_offset	snes_ptr_offset	dialog
+ability_names	33	0x116200		8				
+battle_commands	96	0x201150	0x115800	7	5			
+character_names	5	0x115500		6				
+dialogue	0x900	0x2013F0	0x082220	3	2	0x000000	0x0A0000	True
+enemy_names	384	0x200050	0x105C00	10	8			
+items	0x100	0x111380		9				
+job_names	22	0x115600		8				
+magics	87	0x111C80		6				
+magics2	73	0x111E8A		9				
+menu_strings	139	0x00F987		2		0x270000	0x000000	
+zone_names	0x100	0x107000		2		0x270000	0x107200	True

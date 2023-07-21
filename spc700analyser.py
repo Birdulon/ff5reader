@@ -25,7 +25,7 @@ Trailing 8 bytes are 16 4bit nibbles that make up the compressed samples.
 import sys
 from midiutil import MIDIFile
 from includes.helpers import indirect, hex
-from includes.const import BGM_Tracks_Safe
+from includes.ff5.const import BGM_Tracks_Safe
 import struct
 import wave
 
