@@ -38,6 +38,7 @@ from includes.snes import *
 import includes.ff5.const as const
 from includes.ff5.strings import StringBlock, RPGe_Dialogue_Width
 from includes.ff5.strings import Strings as FFVStrings
+import includes.ff5.structs as FFVStructs
 import includes.ff4 as ff4
 import includes.ff5 as ff5
 import includes.ff6 as ff6
@@ -87,16 +88,6 @@ class FF5Reader(QMainWindow):
         string_images[k0] += string_images.pop(k)
     perfcount()
 
-    battle_bg_structure = [('Tileset',     1, None),
-                           ('Palette 1',   1, None),
-                           ('Palette 2',   1, None),
-                           ('Tilemap',     1, None),
-                           ('TilemapFlip', 1, None),
-                           (hex(5, 1),     1, None),
-                           ('Animation',   1, None),
-                           ('PaletteCycle',1, None),]
-    battle_bg_headers = ['Address'] + [z[0] for z in battle_bg_structure]
-    battle_bg_data = [parse_struct(ROM_jp, 0x14BA21 + (i*8), battle_bg_structure) for i in range(34)]
 
     tileset_headers = ("ID", "Offset", "Pointer", "Expected Length")
     tileset_data = []
@@ -117,16 +108,6 @@ class FF5Reader(QMainWindow):
         address = start + (npc*7)
         npc_layers.append([hex(i, 6), hex(layer, 3)] + parse_struct(ROM_en, address, const.npc_layer_structure))
 
-    enemy_sprite_data = []
-    enemy_sprite_structure = [
-      ('Sprite data offset', 2, None),
-      ('Multiple things',    2, None),
-      ('Tile Layout ID',     1, None),
-      ]
-    enemy_sprite_headers = ['Address']+[i[0] for i in enemy_sprite_structure]+['EN Name','EN Name']
-    address = 0x14B180
-    for i in range(0x180):
-      enemy_sprite_data.append(parse_struct(ROM_en, address + (i*5), enemy_sprite_structure) + string_images['enemy_names'][i][3:5])
 
     perfcount()
     print('Generating map tiles')
@@ -187,6 +168,7 @@ class FF5Reader(QMainWindow):
     self.battle_strips = make_character_battle_sprites(ROM_en)
     status_strips = make_character_status_sprites(ROM_en)
     enemy_sprites = make_enemy_sprites(ROM_en)
+    enemy_sprite_data = FFVStructs.EnemySprite.get_data(ROM_en)
     enemy_sprites_named = [stack_labels(s, d[-2]) for s, d in zip(enemy_sprites, enemy_sprite_data)]
     perfcount()
 
@@ -242,12 +224,13 @@ class FF5Reader(QMainWindow):
     self.ff6widget.addTab(make_px_table(self.portraits_ff6, cols=19, scale=2), 'Character Portraits')
 
 
-    structs_tab.addTab(make_table(ff5.ZoneData.zone_headers, ff5.ZoneData.get_data(), True), 'Zones')
+    structs_tab.addTab(make_table(FFVStructs.ZoneData.get_headers(), FFVStructs.ZoneData.get_data(ROM_en), True), 'Zones')
+    structs_tab.addTab(make_table(FFVStructs.BattleBackground.get_headers(), FFVStructs.BattleBackground.get_data(ROM_jp), True), 'BattleBGs')
+    structs_tab.addTab(make_table(FFVStructs.EnemySprite.get_headers(), enemy_sprite_data, True), 'Enemy Sprites')
     structs_tab.addTab(make_table(tileset_headers, tileset_data, True), 'Tilesets')
-    structs_tab.addTab(make_table(battle_bg_headers, battle_bg_data, True), 'BattleBGs')
     structs_tab.addTab(make_table(const.npc_layer_headers, npc_layers, True), 'NPC Layers')
-    structs_tab.addTab(make_table(enemy_sprite_headers, enemy_sprite_data, True), 'Enemy Sprites')
 
+    # Strings tabs
     for k, images in string_images.items():
       scale = 1 if FFVStrings.config[k].get('dialog') else 2
       caption = ' '.join(f'{w[0].upper()}{w[1:]}' for w in k.split('_'))
