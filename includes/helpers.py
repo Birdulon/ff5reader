@@ -75,6 +75,18 @@ def get_contiguous_address_slices(rom: bytes, slices, indirect_offset: int = 0) 
 	return output
 
 
+def get_null_terminated_address_slices(rom: bytes, slices, indirect_offset: int = 0) -> list:
+	pointers = [indirect2(rom, s) + indirect_offset for s in slices]
+	output = []
+	for ptr in pointers:
+		start = memory_address_to_rom_address(ptr)
+		end = start
+		while rom[end] > 0:
+			end += 1
+		output.append(slice(start, end))
+	return output
+
+
 def get_bytestring_slices(rom: bytes, start_address: int, each_length: int, num_strings: int, indirect_offset=None, indirect_null_terminated=False) -> list:
 	if indirect_offset is not None:
 		if not indirect_null_terminated:

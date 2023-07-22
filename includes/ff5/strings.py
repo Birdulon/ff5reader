@@ -1,4 +1,4 @@
-from ..helpers import get_slices, get_contiguous_address_slices, load_table, load_tsv
+from ..helpers import get_slices, get_contiguous_address_slices, get_null_terminated_address_slices, load_table, load_tsv
 from . import files
 from typing import Callable, Iterable
 from pathlib import Path
@@ -182,11 +182,17 @@ def make_snes_jp_en_strings(data: dict[str, object]) -> tuple[StringBlock, Strin
 	pointer_slices_en = get_slices(data['address'], data['bytes'], data['num_entries'])
 
 	if indirect_offset_jp is not None:
-		address_slices_jp = get_contiguous_address_slices(files.ROM_SNES, pointer_slices_jp, indirect_offset_jp)
+		if data.get('null_terminated'):
+			address_slices_jp = get_null_terminated_address_slices(files.ROM_SNES, pointer_slices_jp, indirect_offset_jp)
+		else:
+			address_slices_jp = get_contiguous_address_slices(files.ROM_SNES, pointer_slices_jp, indirect_offset_jp)
 	else:
 		address_slices_jp = pointer_slices_jp
 	if indirect_offset_en is not None:
-		address_slices_en = get_contiguous_address_slices(files.ROM_RPGe, pointer_slices_en, indirect_offset_en)
+		if data.get('null_terminated'):
+			address_slices_en = get_null_terminated_address_slices(files.ROM_RPGe, pointer_slices_en, indirect_offset_en)
+		else:
+			address_slices_en = get_contiguous_address_slices(files.ROM_RPGe, pointer_slices_en, indirect_offset_en)
 	else:
 		address_slices_en = pointer_slices_en
 	raws_jp = [files.ROM_SNES[s] for s in address_slices_jp]
