@@ -42,8 +42,8 @@ import includes.ff4 as ff4
 import includes.ff5 as ff5
 import includes.ff6 as ff6
 
-filename_jp_ff4 = 'Final Fantasy IV (Japan) (Rev A).sfc'
-filename_jp_ff6 = 'Final Fantasy VI (Japan).sfc'
+filename_jp_ff4 = 'roms/Final Fantasy IV (Japan) (Rev A).sfc'
+filename_jp_ff6 = 'roms/Final Fantasy VI (Japan).sfc'
 
 
 
