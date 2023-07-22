@@ -17,7 +17,7 @@
 '''
 
 import sys
-import os
+import re
 from struct import unpack
 from itertools import chain
 from array import array
@@ -78,6 +78,13 @@ class FF5Reader(QMainWindow):
 
     print('Generating String Images')
     string_images = {k: make_string_img_list(*FFVStrings.blocks_SNES_RPGe[k], large=config.get('dialog')) for k,config in FFVStrings.config.items()}
+    ends_in_digit = re.compile('^([\w_]+)(\d+)')
+    for k in sorted(list(string_images.keys())):  # Pre-generate keys as we destructively iterate the dict
+      if m := ends_in_digit.match(k):
+        k0 = m[1]
+        n = int(m[2])
+        print(f'Collapsing strings list {k} into {k0}')
+        string_images[k0] += string_images.pop(k)
     perfcount()
 
     battle_bg_structure = [('Tileset',     1, None),
@@ -241,16 +248,10 @@ class FF5Reader(QMainWindow):
     structs_tab.addTab(make_table(const.npc_layer_headers, npc_layers, True), 'NPC Layers')
     structs_tab.addTab(make_table(enemy_sprite_headers, enemy_sprite_data, True), 'Enemy Sprites')
 
-    strings_tab.addTab(make_table(imglist_headers, string_images['menu_strings'], row_labels=False), 'Menu Strings')
-    strings_tab.addTab(make_table(imglist_headers, string_images['items'], row_labels=False), 'Items')
-    strings_tab.addTab(make_table(imglist_headers, string_images['magics']+string_images['magics2'], row_labels=False), 'Magics')
-    strings_tab.addTab(make_table(imglist_headers, string_images['enemy_names'], row_labels=False), 'Enemy Names')
-    strings_tab.addTab(make_table(imglist_headers, string_images['character_names'], row_labels=False), 'Character Names')
-    strings_tab.addTab(make_table(imglist_headers, string_images['job_names'], row_labels=False), 'Job Names')
-    strings_tab.addTab(make_table(imglist_headers, string_images['ability_names'], row_labels=False), 'Ability Names')
-    strings_tab.addTab(make_table(imglist_headers, string_images['battle_commands'], row_labels=False), 'Battle Commands')
-    strings_tab.addTab(make_table(imglist_headers, string_images['zone_names'], True, scale=1), 'Zone Names')
-    strings_tab.addTab(make_table(imglist_headers, string_images['dialogue'], scale=1), 'Dialogue')
+    for k, images in string_images.items():
+      scale = 1 if FFVStrings.config[k].get('dialog') else 2
+      caption = ' '.join(f'{w[0].upper()}{w[1:]}' for w in k.split('_'))
+      strings_tab.addTab(make_table(imglist_headers, images, row_labels=False, scale=scale), caption)
 
     self.string_decoder = QWidget()
     self.decoder_input = QLineEdit()
