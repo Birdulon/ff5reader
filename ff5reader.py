@@ -19,10 +19,7 @@
 import sys
 import re
 from struct import unpack
-from itertools import chain
-from array import array
 import time
-import functools
 from typing import Iterable
 
 from includes.helpers import *
@@ -72,13 +69,12 @@ class FF5Reader(QMainWindow):
       'glyphs_jp_l': generate_glyphs_large(ROM_jp, 0x03E800),
       'glyphs_kanji': generate_glyphs_large(ROM_jp, 0x1BD000, 0x1AA),  # Kanji are unchanged in EN version
       }
-    make_string_img_list = functools.partial(_make_string_img_list, **self.glyph_sprites)
     perfcount()
 
     imglist_headers = ['ID', 'EN Pointer', 'EN Address', 'EN String', 'EN Img', 'JP Pointer', 'JP Address', 'JP String', 'JP Img']
 
     print('Generating String Images')
-    string_images = {k: make_string_img_list(*FFVStrings.blocks_SNES_RPGe[k], large=config.get('dialog')) for k,config in FFVStrings.config.items()}
+    string_images = {k: _make_string_img_list(*FFVStrings.blocks_SNES_RPGe[k], large=config.get('dialog'), **self.glyph_sprites) for k,config in FFVStrings.config.items()}
     ends_in_digit = re.compile('^([\w_]+)(\d+)')
     for k in sorted(list(string_images.keys())):  # Pre-generate keys as we destructively iterate the dict
       if m := ends_in_digit.match(k):
