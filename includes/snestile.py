@@ -200,10 +200,14 @@ def generate_palette(rom, offset, length=32, transparent=False):
   for i in range(offset, offset+length, 2):
     if (i+2) < len(rom):
       short = unpack('<H', rom[i:i+2])[0]
-      b = (short & 0x7C00) >>  7  # b 0XXXXX00 00000000 -> 00000000 00000000 XXXXX000
-      g = (short & 0x03E0) <<  6  # b 000000XX XXX00000 -> 00000000 XXXXX000 00000000
-      r = (short & 0x001F) << 19  # b 00000000 000XXXXX -> XXXXX000 00000000 00000000
-      color = 0xFF000000|r|g|b
+      # b = (short & 0x7C00) >>  7  # b 0XXXXX00 00000000 -> 00000000 00000000 XXXXX000
+      # g = (short & 0x03E0) <<  6  # b 000000XX XXX00000 -> 00000000 XXXXX000 00000000
+      # r = (short & 0x001F) << 19  # b 00000000 000XXXXX -> XXXXX000 00000000 00000000
+      # color = 0xFF000000|r|g|b
+      b = round(((short >> 10) & 0x1F) * 255 / 31.0)  # 0b11111 -> 0b11111111
+      g = round(((short >>  5) & 0x1F) * 255 / 31.0)  # 0b11111 -> 0b11111111
+      r = round(((short >>  0) & 0x1F) * 255 / 31.0)  # 0b11111 -> 0b11111111
+      color = 0xFF000000|(r<<16)|(g<<8)|b
     else:
       color = 0  # Transparent
     palette.append(color)
