@@ -161,6 +161,10 @@ def decode_SNES_small(glyph: int) -> str:
 	# return Glyphs_small_dakuten_SNES[glyph]
 
 
+def decode_SNES_small_dakuten(glyph: int) -> str:
+	return Glyphs_small_dakuten_SNES[glyph]
+
+
 def decode_SNES_dialog(glyph: int) -> str:
 	if glyph > 0xFF:
 		kanji_idx = glyph - 0x1E00
@@ -206,7 +210,7 @@ def make_snes_jp_en_strings(data: dict[str, object]) -> tuple[StringBlock, Strin
 	else:
 		glyphs_jp = raws_jp
 		glyphs_en = raws_en
-		strings_jp = [decode_glyphs(glyphs, decode_SNES_small) for glyphs in glyphs_jp]
+		strings_jp = [decode_glyphs(glyphs, decode_SNES_small) + ' or ' + decode_glyphs(glyphs, decode_SNES_small_dakuten) for glyphs in glyphs_jp]
 		strings_en = [decode_glyphs(glyphs, decode_RPGe_small) for glyphs in glyphs_en]
 	return StringBlock(raws_jp, glyphs_jp, strings_jp, address_slices_jp, pointer_slices_jp), StringBlock(raws_en, glyphs_en, strings_en, address_slices_en, pointer_slices_en)
 
