@@ -272,7 +272,7 @@ class SPCParser:
     return self.m
 
 
-filename_jp = 'Final Fantasy V (Japan).sfc'
+filename_jp = 'roms/Final Fantasy V (Japan).sfc'
 def get_song_data(rom, id):
   lookup_offset = 0x043B97 + (id*3)
   offset = indirect(rom, lookup_offset, 3)-0xC00000
@@ -308,13 +308,13 @@ def make_sample(rom, id):
     c_samples, loop, end, filter = decode_brr(p)
     samples += c_samples
     if filter == 1:
-      for i in range(-8, 0, 1):
+      for i in range(-16, 0, 1):
         samples[i] = clamp_short(samples[i] + (samples[i-1]*15)//16)
     elif filter == 2:
-      for i in range(-8, 0, 1):
+      for i in range(-16, 0, 1):
         samples[i] = clamp_short(samples[i] + (samples[i-1]*61)//32 - (samples[i-2]*15)//16 )
     elif filter == 3:
-      for i in range(-8, 0, 1):
+      for i in range(-16, 0, 1):
         samples[i] = clamp_short(samples[i] + (samples[i-1]*115)//64 - (samples[i-2]*13)//16 )
     if end:
       break
@@ -342,14 +342,15 @@ def read_rom(filename=filename_jp):
 
 if __name__ == '__main__':
     #main(sys.argv[1])
-    if len(sys.argv) > 1 and sys.argv[1]:
-      i = int(sys.argv[1])
-      filename = 'test {:02d} - {}.mid'.format(i, BGM_Tracks_Safe[i])
-      tracks = get_song_data(read_rom(), i)
-      make_midi_file(tracks, filename=filename)
-    else:
-      for i, t in enumerate(BGM_Tracks_Safe):
-        filename = 'test {:02d} - {}.mid'.format(i, t)
-        print('Creating MIDI {}'.format(filename))
-        tracks = get_song_data(read_rom(), i)
-        make_midi_file(tracks, filename=filename)
+    # if len(sys.argv) > 1 and sys.argv[1]:
+    #   i = int(sys.argv[1])
+    #   filename = 'test {:02d} - {}.mid'.format(i, BGM_Tracks_Safe[i])
+    #   tracks = get_song_data(read_rom(), i)
+    #   make_midi_file(tracks, filename=filename)
+    # else:
+    #   for i, t in enumerate(BGM_Tracks_Safe):
+    #     filename = 'test {:02d} - {}.mid'.format(i, t)
+    #     print('Creating MIDI {}'.format(filename))
+    #     tracks = get_song_data(read_rom(), i)
+    #     make_midi_file(tracks, filename=filename)
+    pass
