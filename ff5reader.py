@@ -335,10 +335,9 @@ class FF5Reader(QMainWindow):
     if len(string) % 1:
       string += '0'
     bytelist = [int(string[i:i+2], 16) for i in range(0, len(string), 2)]
-    tups = make_string_img_small(bytes(bytelist), self.glyph_sprites['glyphs_en_s'])
-    print(tups[0])
+    str_img = make_string_img_small(bytes(bytelist), self.glyph_sprites['glyphs_en_s'])
     img = QLabel()
-    img.setPixmap(tups[1])
+    img.setPixmap(str_img)
     self.decoder_layout.addWidget(img)
     self.decoder_input.setText('')
 
