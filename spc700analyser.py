@@ -113,11 +113,11 @@ class SPCParser:
       (0, 'TremoloOff'),          # 0xDA
       (2, 'PanLoop'),             # 0xDB
       (0, 'PanLoopOff'),          # 0xDC
-      (1, 'Noise'),               # 0xDD
-      (0, 'NoiseOff'),            # 0xDE
-      (0, 'unk'),                 # 0xDF
-      (0, 'unk'),                 # 0xE0
-      (0, 'unk'),                 # 0xE1
+      (1, 'NoiseFreq'),           # 0xDD
+      (0, 'NoiseOn'),             # 0xDE
+      (0, 'NoiseOff'),            # 0xDF
+      (0, 'PitchModOn'),          # 0xE0
+      (0, 'PitchModOff'),         # 0xE1
       (0, 'EchoOn'),              # 0xE2
       (0, 'EchoOff'),             # 0xE3
       (1, self._set_octave),      # 0xE4
