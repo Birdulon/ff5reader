@@ -179,7 +179,7 @@ def decode_glyphs(glyphs: list[str], glyph_decoder: Callable[[int], str]) -> str
 
 
 def make_snes_jp_en_strings(data: dict[str, object]) -> tuple[StringBlock, StringBlock]:
-	print(data)
+	# print(data)
 	indirect_offset_jp = data.get('snes_ptr_offset')
 	indirect_offset_en = data.get('rpge_ptr_offset')
 	pointer_slices_jp = get_slices(data.get('snes_address', data['address']), data.get('snes_bytes', data['bytes']), data['num_entries'])

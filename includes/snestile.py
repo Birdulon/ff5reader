@@ -191,6 +191,26 @@ def generate_glyphs_large(rom, offset, num=0x100):
     spritelist.append(create_tritile(rom[j:j+24]))
   return spritelist
 
+def generate_glyphs_large_ff6(rom, offset, num=0x4E0):
+  def create_glyph(data):
+    img = QImage(16, 11, QImage.Format_Indexed8)
+    imgbits = img.bits()
+    imgbits.setsize(img.byteCount())
+    img.setColorTable(ff5const.dialogue_palette)
+    tile = array('B', range(176))
+    for row in range(11):
+      short = int.from_bytes(data[row*2:row*2+2], 'little')
+      for b in range(16):
+          tile[(15-b) + (row*16)] = (short >> b & 1)
+    imgbits[:192] = tile
+    return QPixmap.fromImage(img)
+
+  spritelist = []
+  for i in range(num):
+    j = offset + (i*22)
+    spritelist.append(create_glyph(rom[j:j+22]))
+  return spritelist
+
 def generate_palette(rom, offset, length=32, transparent=False):
   '''
   Length is in bytes not colors (2 bytes per color)

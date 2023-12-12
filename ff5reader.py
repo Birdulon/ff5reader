@@ -65,12 +65,25 @@ class FF5Reader(QMainWindow):
     return ff4.make_character_portrait_sprites(self.ROM_FF4jp)
 
   @cached_property
+  def glyph_sprites_ff4(self):
+    return {
+      'glyphs_jp': generate_glyphs(self.ROM_FF4jp, 0x057000),
+    }
+
+  @cached_property
   def battle_strips_ff6(self):
     return ff6.make_character_battle_sprites(self.ROM_FF6jp)
 
   @cached_property
   def portraits_ff6(self):
     return ff6.make_character_portrait_sprites(self.ROM_FF6jp)
+
+  @cached_property
+  def glyph_sprites_ff6(self):
+    return {
+      'glyphs_jp_s': generate_glyphs(self.ROM_FF6jp, 0x048000),
+      'glyphs_jp_l': generate_glyphs_large_ff6(self.ROM_FF6jp, 0x0494C0),
+    }
 
   @cached_property
   def battle_bgs(self):
@@ -309,10 +322,13 @@ class FF5Reader(QMainWindow):
       ff4widget.addTab(make_px_table(self.battle_strips_ff4, cols=16, scale=2), 'Character Battle Sprites')
       ff4widget.addTab(make_px_table(self.portraits_ff4, cols=14, scale=2), 'Character Portraits')
       ff4widget.addTab(make_px_table(self.field_strips_ff4, cols=17, scale=2), 'Character Field Sprites')
+      ff4widget.addTab(make_px_table(self.glyph_sprites_ff4['glyphs_jp'], scale=3), 'Font Glyphs')
 
     def load_ff6():
       ff6widget.addTab(make_px_table(self.battle_strips_ff6, cols=32, scale=2), 'Character Sprites')
       ff6widget.addTab(make_px_table(self.portraits_ff6, cols=19, scale=2), 'Character Portraits')
+      ff6widget.addTab(make_px_table(self.glyph_sprites_ff6['glyphs_jp_s'], scale=3), 'Font Glyphs Small')
+      ff6widget.addTab(make_px_table(self.glyph_sprites_ff6['glyphs_jp_l'], scale=3), 'Font Glyphs Large')
 
     game_tab_loaders = [None, load_ff5, load_ff4, load_ff6]
     def load_game_tab(index: int):
